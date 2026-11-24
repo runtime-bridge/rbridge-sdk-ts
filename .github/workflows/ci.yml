@@ -1,0 +1,35 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        node: [20, 22]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: rbridge-sdk-ts
+      - uses: actions/checkout@v4
+        with:
+          repository: rbridge/rbridge
+          path: rbridge
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: rbridge/go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - run: make build fakeagent
+        working-directory: rbridge
+      - run: npm test
+        working-directory: rbridge-sdk-ts
