@@ -127,6 +127,7 @@ export declare class Client {
 }
 
 export declare function text(s: string): ContentBlock[];
+export declare function socketPath(env?: Record<string, string | undefined>): string;
 export declare function runtimeDir(env?: Record<string, string | undefined>): string;
 export declare function connect(options?: { socket?: string; client?: string; env?: Record<string, string | undefined> }): Promise<Client>;
 export declare function connectHTTP(options?: { url?: string; token?: string; client?: string; env?: Record<string, string | undefined> }): Promise<Client>;

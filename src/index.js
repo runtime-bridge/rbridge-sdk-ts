@@ -46,11 +46,27 @@ export function runtimeDir(env = process.env) {
 }
 
 /**
+ * The running daemon's socket. daemon.json records it, because the daemon
+ * moves the socket to a short temp path when the runtime directory is too
+ * deep for a Unix socket.
+ */
+export function socketPath(env = process.env) {
+  const dir = runtimeDir(env);
+  try {
+    const state = JSON.parse(fs.readFileSync(path.join(dir, "daemon.json"), "utf8"));
+    if (state.socket) return state.socket;
+  } catch {
+    // no daemon has written its state yet
+  }
+  return path.join(dir, "bridge.sock");
+}
+
+/**
  * Connects to the daemon over IPC.
  * @param {{socket?: string, client?: string, env?: object}} [options]
  */
 export async function connect(options = {}) {
-  const socket = options.socket ?? path.join(runtimeDir(options.env), "bridge.sock");
+  const socket = options.socket ?? socketPath(options.env);
   const transport = await IPCTransport.open(socket);
   const client = new Client(transport);
   await transport.call("initialize", { client: options.client ?? "default", protocol_version: PROTOCOL_VERSION });
