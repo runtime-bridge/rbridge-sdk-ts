@@ -1,5 +1,5 @@
 {
-  "name": "@rbridge/sdk",
+  "name": "@runtime-bridge/sdk",
   "version": "0.1.0",
   "description": "Client for the rbridge daemon: use the agent runtimes installed on your machine from Node.js",
   "license": "Apache-2.0",
@@ -10,10 +10,19 @@
       "default": "./src/index.js"
     }
   },
-  "files": ["src", "LICENSE", "README.md"],
-  "engines": { "node": ">=20" },
+  "files": [
+    "src",
+    "LICENSE",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "test": "node --test test/*.test.js"
   },
-  "repository": { "type": "git", "url": "https://github.com/runtime-bridge/rbridge-sdk-ts" }
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/runtime-bridge/rbridge-sdk-ts"
+  }
 }
