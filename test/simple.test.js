@@ -25,16 +25,64 @@ test("run resolves to text and usage", async () => {
   await rb.close();
 });
 
-test("streaming is one option", async () => {
+// Captures the text written to stdout while fn runs. The test runner sends
+// its own reports through stdout as binary buffers, which pass through.
+async function captured(fn) {
+  const write = process.stdout.write;
+  let out = "";
+  process.stdout.write = function (chunk, ...rest) {
+    if (typeof chunk !== "string") return write.call(this, chunk, ...rest);
+    out += chunk;
+    return true;
+  };
+  try {
+    return [await fn(), out];
+  } finally {
+    process.stdout.write = write;
+  }
+}
+
+test("stream: true prints and resolves to the answer", async () => {
   const rb = make();
-  const s = await rb.run("streamed", { stream: true });
+  const [r, out] = await captured(() => rb.run("streamed", { stream: true }));
+  assert.deepEqual([out, r.text], ["echo: streamed\n", "echo: streamed"]);
+  const chunks = [];
+  const toFn = make({ stream: (c) => chunks.push(c) });
+  assert.equal((await toFn.run("to a function")).text, "echo: to a function");
+  assert.equal(chunks.join(""), "echo: to a function");
+  await rb.close();
+  await toFn.close();
+});
+
+test("stream() is the iterator", async () => {
+  const rb = make();
+  const s = rb.stream("streamed");
   let out = "";
   for await (const chunk of s) out += chunk;
   assert.equal(out, "echo: streamed");
   assert.equal(s.response.text, "echo: streamed");
   assert.ok(s.events.some((e) => e.type === "message.delta"));
-  assert.equal(await (await rb.run("again", { stream: true })).text(), "echo: again");
+  assert.equal(await rb.stream("again").text(), "echo: again");
   await rb.close();
+});
+
+test("everything set once", async () => {
+  const rb = make({ chat: true, stream: true });
+  const [ids, out] = await captured(async () => {
+    const first = await rb.run("one");
+    const rest = await rb.run(["two", "three"]);
+    await rb.reset();
+    const fresh = await rb.run("four");
+    return [first.sessionId, rest.map((r) => r.sessionId), fresh.sessionId];
+  });
+  assert.deepEqual(ids[1], [ids[0], ids[0]]);
+  assert.notEqual(ids[2], ids[0]);
+  assert.equal(out, "echo: one\necho: two\necho: three\necho: four\n");
+  await rb.close();
+  const plain = make();
+  await assert.rejects(plain.run(["a", "b"]), TypeError);
+  assert.deepEqual((await plain.run(["a", "b"], { chat: true })).map((r) => r.text), ["echo: a", "echo: b"]);
+  await plain.close();
 });
 
 test("a chat keeps one session", async () => {
@@ -44,8 +92,9 @@ test("a chat keeps one session", async () => {
   assert.deepEqual([one.text, two.text], ["echo: one", "echo: two"]);
   assert.equal(one.sessionId, two.sessionId);
   let streamed = "";
-  for await (const c of await chat.send("three", { stream: true })) streamed += c;
+  for await (const c of chat.stream("three")) streamed += c;
   assert.equal(streamed, "echo: three");
+  assert.deepEqual((await chat.send(["four", "five"])).map((r) => r.text), ["echo: four", "echo: five"]);
   await chat.close();
   await rb.close();
 });

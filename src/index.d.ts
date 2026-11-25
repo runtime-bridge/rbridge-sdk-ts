@@ -240,7 +240,14 @@ export interface RunOptions {
   timeout?: number;
 }
 
+/** true prints to the terminal; a function receives each chunk instead. */
+export type StreamTo = boolean | ((chunk: string) => void);
+
 export interface RbridgeOptions extends RunOptions {
+  /** Default for every run: print answers as they are written, or hand chunks to a function. */
+  stream?: StreamTo;
+  /** Default for every run: continue one conversation (rb.reset() starts a new one). */
+  chat?: boolean;
   maxConcurrency?: number;
   /** No new run starts once this many US dollars have been spent. */
   maxCostUsd?: number;
@@ -271,8 +278,10 @@ export declare class Stream implements AsyncIterable<string> {
 
 export declare class Chat {
   readonly id: string | null;
-  send(prompt: Prompt, options?: { stream?: false }): Promise<Response>;
-  send(prompt: Prompt, options: { stream: true }): Promise<Stream>;
+  send(prompt: Prompt, options?: { stream?: StreamTo }): Promise<Response>;
+  send(prompt: string[], options?: { stream?: StreamTo }): Promise<Response[]>;
+  /** The answer as an async iterable of text chunks. */
+  stream(prompt: Prompt): Stream;
   close(): Promise<void>;
 }
 
@@ -281,8 +290,14 @@ export declare class Rbridge {
   usage: { inputTokens: number; outputTokens: number; costUsd: number };
   /** The lower-level Client, connected on first use. */
   client(): Promise<Client>;
-  run(prompt: Prompt, options?: RunOptions & { stream?: false; schema?: object; onEvent?: (e: Event) => void }): Promise<Response>;
-  run(prompt: Prompt, options: RunOptions & { stream: true; schema?: object; onEvent?: (e: Event) => void }): Promise<Stream>;
+  /** stream prints (or hands chunks to a function) and still resolves to the Response; chat continues this object's conversation. */
+  run(prompt: Prompt, options?: RunOptions & { stream?: StreamTo; chat?: boolean; schema?: object; onEvent?: (e: Event) => void }): Promise<Response>;
+  /** With chat, the messages are sent in order in one conversation. */
+  run(prompt: string[], options?: RunOptions & { stream?: StreamTo; chat?: boolean; schema?: object }): Promise<Response[]>;
+  /** The answer as an async iterable of text chunks, to handle each chunk yourself. */
+  stream(prompt: Prompt, options?: RunOptions & { chat?: boolean; schema?: object; onEvent?: (e: Event) => void }): Stream;
+  /** Ends the conversation chat: true keeps. */
+  reset(): Promise<void>;
   runMany(prompts: Array<Prompt | ({ prompt: Prompt } & RunOptions)>, options?: RunOptions & { returnExceptions?: boolean; maxConcurrency?: number; schema?: object }): Promise<Array<Response | Error>>;
   chat(options?: RunOptions): Chat;
   runtimes(): Promise<Array<{ id: string; name: string; available: boolean; version?: string }>>;

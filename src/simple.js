@@ -5,11 +5,12 @@
 //   const rb = new Rbridge({ runtime: "claude-code" });
 //   console.log((await rb.run("Summarise README.md")).text);
 //
-//   for await (const chunk of await rb.run("Explain app.js", { stream: true })) process.stdout.write(chunk);
+//   await rb.run("Explain app.js", { stream: true });     // printed as it is written
 //
-//   const chat = rb.chat();
-//   await chat.send("What does app.js do?");
-//   await chat.send("Now write tests for it");
+//   const bot = new Rbridge({ runtime: "claude-code", chat: true, stream: true });
+//   await bot.run("What does app.js do?");                // one conversation,
+//   await bot.run("Now write tests for it");              // streamed, remembered
+//   await bot.run(["Summarise it", "Shorter"]);           // several messages, one call
 //
 //   const answers = await rb.runMany(["Review a.js", "Review b.js"]);
 //
@@ -123,6 +124,20 @@ export class Stream {
   }
 }
 
+// Hands every chunk to the terminal (stream: true) or to the given function,
+// then resolves to the whole Response.
+async function deliver(stream, to) {
+  for await (const chunk of stream) {
+    if (typeof to === "function") to(chunk);
+    else process.stdout.write(chunk);
+  }
+  const text = stream.response?.text ?? "";
+  if (typeof to !== "function" && text && !text.endsWith("\n")) process.stdout.write("\n");
+  return stream.response;
+}
+
+const isMessages = (p) => Array.isArray(p) && p.length > 0 && p.every((x) => typeof x === "string");
+
 function approver(approve) {
   if (approve == null || approve === false || approve === "deny") return undefined;
   if (approve === true || approve === "allow") return async () => true;
@@ -141,9 +156,13 @@ function approver(approve) {
  * requests, true to allow, "read" for reads only, or a function), sandbox
  * ("files" or "full"), timeout (seconds), maxConcurrency for runMany, and
  * maxCostUsd, after which no new run starts.
+ *
+ * stream: true prints every answer as it is written (or pass a function to
+ * receive the chunks); run still resolves to the whole Response. chat: true
+ * makes every run continue one conversation; rb.reset() starts a new one.
  */
 export class Rbridge {
-  constructor({ maxConcurrency = 4, maxCostUsd, app = "default", env, client, ...defaults } = {}) {
+  constructor({ maxConcurrency = 4, maxCostUsd, stream = false, chat = false, app = "default", env, client, ...defaults } = {}) {
     this.#check(defaults);
     this.defaults = { skills: [], approve: false, ...defaults };
     this.maxConcurrency = maxConcurrency;
@@ -154,6 +173,9 @@ export class Rbridge {
     this.env = env;
     this.connection = client ? Promise.resolve(client) : null;
     this.skillDirs = new Map();
+    this.streamTo = stream;
+    this.chatting = chat;
+    this.conversation = null;
   }
 
   #check(opts) {
@@ -215,7 +237,7 @@ export class Rbridge {
   }
 
   #count(raw) {
-    const r = new Response(raw);
+    const r = raw instanceof Response ? raw : new Response(raw);
     this.usage.inputTokens += r.usage.inputTokens;
     this.usage.outputTokens += r.usage.outputTokens;
     this.usage.costUsd = Math.round((this.usage.costUsd + r.usage.costUsd) * 1e6) / 1e6;
@@ -226,15 +248,9 @@ export class Rbridge {
     return (await this.client()).open(t, { onEvent, approver: approver(o.approve), model: o.model });
   }
 
-  /**
-   * Runs one prompt in a new session. Resolves to a Response, or with
-   * { stream: true } to a Stream to iterate. { schema } asks for JSON matching
-   * it, parsed into response.data; { onEvent } sees every event as it happens.
-   */
-  async run(prompt, { stream = false, onEvent, ...options } = {}) {
-    const o = this.#options(options);
-    const t = await this.#task(prompt, o);
-    const once = async (sink) => {
+  #stream(prompt, o, onEvent) {
+    return new Stream(async (sink) => {
+      const t = await this.#task(prompt, o);
       const s = await this.#open(t, o, (ev) => {
         sink?.(ev);
         onEvent?.(ev);
@@ -246,9 +262,58 @@ export class Rbridge {
       } finally {
         await s.close();
       }
-    };
-    if (stream) return new Stream(once);
-    return new Response(await once());
+    });
+  }
+
+  #defaultChat(options) {
+    this.conversation ??= new Chat(this, this.#options(options));
+    return this.conversation;
+  }
+
+  /**
+   * Runs a prompt and resolves to its Response. { stream: true } prints the
+   * answer as it is written (a function receives the chunks instead); the
+   * defaults come from new Rbridge({ stream, chat }). With chat, the prompt
+   * continues this object's conversation, and an array of messages is sent
+   * in order, resolving to an array of Responses. { schema } asks for JSON
+   * matching it, parsed into response.data; { onEvent } sees every event.
+   */
+  async run(prompt, { stream, chat, onEvent, ...options } = {}) {
+    stream ??= this.streamTo;
+    chat ??= this.chatting;
+    if (isMessages(prompt)) {
+      if (!chat) throw new TypeError("an array of messages is a conversation: pass chat: true, or use runMany for separate prompts");
+      const out = [];
+      for (const p of prompt) out.push(await this.run(p, { stream, chat: true, onEvent, ...options }));
+      return out;
+    }
+    if (chat) return this.#defaultChat(options).send(prompt, { stream });
+    const o = this.#options(options);
+    if (stream) return deliver(this.#stream(prompt, o, onEvent), stream);
+    const t = await this.#task(prompt, o);
+    const s = await this.#open(t, o, onEvent);
+    try {
+      return this.#count(await s.prompt(prompt));
+    } finally {
+      await s.close();
+    }
+  }
+
+  /**
+   * The answer as an async iterable of text chunks, for when you want to
+   * handle each chunk yourself ({ stream: true } on run does it for you).
+   */
+  stream(prompt, { chat, onEvent, ...options } = {}) {
+    chat ??= this.chatting;
+    if (chat) return this.#defaultChat(options).stream(prompt);
+    return this.#stream(prompt, this.#options(options), onEvent);
+  }
+
+  /** Ends the conversation that chat: true keeps; the next run starts a new one. */
+  async reset() {
+    const c = this.conversation;
+    this.conversation = null;
+    if (c) await c.close();
   }
 
   /**
@@ -258,6 +323,7 @@ export class Rbridge {
    * instead of rejecting.
    */
   async runMany(prompts, { returnExceptions = false, maxConcurrency, ...options } = {}) {
+    options = { chat: false, stream: false, ...options };
     const out = new Array(prompts.length);
     let next = 0;
     const worker = async () => {
@@ -309,6 +375,7 @@ export class Rbridge {
   }
 
   async close() {
+    await this.reset();
     if (this.connection) (await this.connection).close();
     this.connection = null;
   }
@@ -340,9 +407,8 @@ export class Chat {
     return this.session?.id ?? null;
   }
 
-  /** Sends one message. Resolves to a Response, or with { stream: true } to a Stream. */
-  async send(prompt, { stream = false } = {}) {
-    const once = (sink) => {
+  #start(prompt) {
+    return (sink) => {
       const run = this.turn.then(async () => {
         this.sink = sink;
         try {
@@ -358,8 +424,28 @@ export class Chat {
       this.turn = run.catch(() => {});
       return run;
     };
-    if (stream) return new Stream(once);
-    return new Response(await once());
+  }
+
+  /**
+   * Sends a message and resolves to the Response; an array of messages is
+   * sent in order and resolves to an array. { stream: true } prints the
+   * answer as it is written (a function receives the chunks instead); the
+   * default comes from new Rbridge({ stream }).
+   */
+  async send(prompt, { stream } = {}) {
+    stream ??= this.rb.streamTo;
+    if (isMessages(prompt)) {
+      const out = [];
+      for (const p of prompt) out.push(await this.send(p, { stream }));
+      return out;
+    }
+    if (stream) return deliver(this.stream(prompt), stream);
+    return new Response(await this.#start(prompt)(null));
+  }
+
+  /** The answer as an async iterable of text chunks. */
+  stream(prompt) {
+    return new Stream(this.#start(prompt));
   }
 
   async close() {
