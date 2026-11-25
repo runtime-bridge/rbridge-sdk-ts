@@ -37,7 +37,8 @@ export interface ContentBlock {
 export type Prompt = string | ContentBlock[];
 
 export interface Task {
-  workspace: string;
+  /** Defaults to the current folder; a relative path is made absolute. */
+  workspace?: string;
   prompt?: Prompt;
   skills?: string[];
   provider?: string;
@@ -191,7 +192,7 @@ export declare function findBinary(env?: Record<string, string | undefined>): st
 /** The project's .rbridge folder that a bundled rbridge uses when RBRIDGE_HOME is unset, or null. */
 export declare function projectHome(): string | null;
 /** Starts the daemon for this environment's rbridge home, if none is running. */
-export declare function startDaemon(env?: Record<string, string | undefined>): void;
+export declare function startDaemon(env?: Record<string, string | undefined>, exitWhenIdle?: string | null): void;
 
 export declare class Client {
   providers(options?: { refresh?: boolean }): Promise<any[]>;
@@ -205,15 +206,15 @@ export declare class Client {
   searchSkills(query?: string): Promise<{ skills: any[]; problems: string[] }>;
   sessions(): Promise<SessionRecord[]>;
   status(): Promise<{ version: string; pid: number; started_at: string; sessions_open: number }>;
-  open(task: Task, options?: SessionOptions): Promise<Session>;
+  open(task: Task | string, options?: SessionOptions): Promise<Session>;
   resume(id: string, options?: SessionOptions): Promise<Session>;
-  run(task: Task & { prompt: Prompt }, options?: SessionOptions): Promise<Result>;
+  run(task: (Task & { prompt: Prompt }) | string, options?: SessionOptions): Promise<Result>;
   close(): void;
 }
 
 export declare function text(s: string): ContentBlock[];
 export declare function socketPath(env?: Record<string, string | undefined>): string;
 export declare function runtimeDir(env?: Record<string, string | undefined>): string;
-/** With start, a daemon that is not running is started first (the bundled rbridge, RBRIDGE_BIN or rbridge on PATH). */
+/** A daemon that is not running is started first (the bundled rbridge, RBRIDGE_BIN or rbridge on PATH) unless start is false. */
 export declare function connect(options?: { socket?: string; client?: string; env?: Record<string, string | undefined>; start?: boolean }): Promise<Client>;
 export declare function connectHTTP(options?: { url?: string; token?: string; client?: string; env?: Record<string, string | undefined> }): Promise<Client>;

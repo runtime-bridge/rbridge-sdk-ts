@@ -28,6 +28,15 @@ export function text(s) {
   return [{ type: "text", text: s }];
 }
 
+// A task with the conveniences filled in: a plain string is the prompt, the
+// workspace defaults to the current folder, and a relative workspace is made
+// absolute (the daemon runs elsewhere and needs a full path).
+function toTask(task) {
+  const t = typeof task === "string" ? { prompt: task } : { ...task };
+  t.workspace = path.resolve(t.workspace || process.cwd());
+  return t;
+}
+
 function toPrompt(p) {
   return typeof p === "string" ? text(p) : p;
 }
@@ -68,13 +77,14 @@ export function socketPath(env = process.env) {
 /**
  * Connects to the daemon over IPC. With rbridge bundled in this package and
  * RBRIDGE_HOME unset, the daemon is this project's (its data in the project's
- * .rbridge folder). With start set, a daemon that is not running is started
- * first, using the bundled rbridge, RBRIDGE_BIN or rbridge on PATH.
+ * .rbridge folder). A daemon that is not running is started first, using the
+ * bundled rbridge, RBRIDGE_BIN or rbridge on PATH; it stops by itself after
+ * 30 idle minutes. Pass start: false to only connect to one already running.
  * @param {{socket?: string, client?: string, env?: object, start?: boolean}} [options]
  */
 export async function connect(options = {}) {
   const env = effectiveEnv(options.env);
-  if (options.start && !options.socket) {
+  if (options.start !== false && !options.socket) {
     try {
       (await IPCTransport.open(socketPath(env))).close();
     } catch {
@@ -348,6 +358,7 @@ export class Client {
    * decides approval requests (without one they are denied).
    */
   async open(task, options = {}) {
+    task = toTask(task);
     const record = await this.t.call("sessions.open", { task: { ...task, prompt: task.prompt ? toPrompt(task.prompt) : undefined }, model: options.model, mode: options.mode, input: typeof options.onInput === "function" });
     return this.#attach(record, options);
   }
@@ -399,6 +410,7 @@ export class Client {
 
   /** Runs a task in a new session and closes it. */
   async run(task, options = {}) {
+    task = toTask(task);
     const s = await this.open(task, options);
     try {
       return await s.prompt(task.prompt);

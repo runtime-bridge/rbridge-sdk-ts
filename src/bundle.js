@@ -1,7 +1,7 @@
 // The rbridge program that ships with this package, and where it keeps data.
 //
 // Published builds depend on one optional package per platform, such as
-// @runtime-bridge/rbridge-linux-x64, holding the rbridge binary; npm installs
+// @rbridge/linux-x64, holding the rbridge binary; npm installs
 // only the one that matches the machine. Installed into a project, that copy
 // belongs to the project: it is used instead of any rbridge on PATH, and its
 // configuration, skills, sessions and audit log live in the project's
@@ -24,7 +24,7 @@ const require = createRequire(import.meta.url);
 const here = path.dirname(fileURLToPath(import.meta.url));
 
 /** The platform package for this machine, as npm names platforms. */
-export const platformPackage = `@runtime-bridge/rbridge-${process.platform}-${process.arch}`;
+export const platformPackage = `@rbridge/${process.platform}-${process.arch}`;
 
 /** The rbridge program from this machine's platform package, or null. */
 export function bundledBinary() {
@@ -99,18 +99,27 @@ export function effectiveEnv(env = process.env) {
   return out;
 }
 
-/** Starts the daemon for this environment's rbridge home, if none is running. */
-export function startDaemon(env) {
+/** How long a daemon the SDK starts itself keeps running with nothing to do. */
+export const AUTO_DAEMON_IDLE = "30m";
+
+/**
+ * Starts the daemon for this environment's rbridge home, if none is running.
+ * It stops by itself after exitWhenIdle with no session and no client (null
+ * keeps it running until rbridge daemon stop).
+ */
+export function startDaemon(env, exitWhenIdle = AUTO_DAEMON_IDLE) {
   env = effectiveEnv(env);
   const bin = findBinary(env);
   if (!bin) {
     throw new RbridgeError(
       "provider_unavailable",
-      "rbridge is not installed: install this package from npm so it brings rbridge, install rbridge itself " +
-        "(https://github.com/runtime-bridge/rbridge), or set RBRIDGE_BIN",
+      "no rbridge daemon is running and rbridge is not installed. Install it with the SDK " +
+        "(npm install @rbridge/sdk, on Linux, macOS or Windows) or on its own " +
+        "(https://github.com/runtime-bridge/rbridge#install), or set RBRIDGE_BIN to its path",
     );
   }
-  const run = spawnSync(bin, ["daemon", "start"], { env, encoding: "utf8", timeout: 60000 });
+  const args = ["daemon", "start", ...(exitWhenIdle ? ["--exit-when-idle", exitWhenIdle] : [])];
+  const run = spawnSync(bin, args, { env, encoding: "utf8", timeout: 60000 });
   if (run.status !== 0) {
     throw new RbridgeError(
       "provider_unavailable",
