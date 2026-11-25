@@ -93,7 +93,7 @@ Every option can be set on `new Rbridge({...})` as a default and overridden on a
 | `stream` | `true` prints answers as they are written; a function receives the chunks instead |
 | `chat` | `true` makes every `run` continue one conversation |
 
-A `Response` has `text`, `data` (with a schema), `runtime`, `sessionId`, `stopReason`, `usage` and `raw`. The `Stream` from `rb.stream()` yields text; afterwards `stream.response` is the `Response` and `stream.events` every event (tools, plans, usage). Pass `onEvent` to `run` to see events as they happen. Errors are `RbridgeError` with a stable `code`. Call `rb.close()` when you are done.
+A `Response` has `text`, `data` (with a schema), `runtime`, `sessionId`, `stopReason`, `usage` and `raw`. The `Stream` from `rb.stream()` yields text; afterwards `stream.response` is the `Response` and `stream.events` every event (tools, plans, usage). Pass `onEvent` to `run` to see events as they happen. Errors are `RbridgeError` with a stable `code` (the list is at https://runtime-bridge.github.io/docs/errors/); `budget_exceeded` means `maxCostUsd` is spent. Call `rb.close()` when you are done.
 
 ## Lower-level API
 
