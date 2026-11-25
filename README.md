@@ -11,6 +11,8 @@ Node.js client for the [rbridge](https://github.com/runtime-bridge/rbridge) daem
 
 No dependencies. Node.js 20 or later.
 
+Documentation and examples: <https://runtime-bridge.github.io/docs/sdks/>.
+
 ## Use
 
 Start the daemon once (`rbridge daemon start`), then:
