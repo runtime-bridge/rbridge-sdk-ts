@@ -21,7 +21,7 @@ jobs:
           path: rbridge-sdk-ts
       - uses: actions/checkout@v4
         with:
-          repository: rbridge/rbridge
+          repository: runtime-bridge/rbridge
           path: rbridge
       - uses: actions/setup-go@v5
         with:

@@ -1,6 +1,6 @@
 # @rbridge/sdk
 
-Node.js client for the [rbridge](https://github.com/rbridge/rbridge) daemon. It lets a Node program hand tasks to the agent runtimes installed on the machine (Claude Code, OpenCode, any ACP agent) through one interface, with skills, approvals and streamed events.
+Node.js client for the [rbridge](https://github.com/runtime-bridge/rbridge) daemon. It lets a Node program hand tasks to the agent runtimes installed on the machine (Claude Code, OpenCode, any ACP agent) through one interface, with skills, approvals and streamed events.
 
 No dependencies. Node.js 20 or later.
 
@@ -31,7 +31,7 @@ rb.close();
 | `open(task, options)` / `resume(id, options)` | Session with `prompt()`, `cancel()`, `close()` |
 | `providers()`, `skills()`, `sessions()`, `status()` | Read the daemon's state |
 
-`options.onEvent` receives every event (`message.delta`, `tool.started`, `approval.required`, `turn.completed`, ...). `options.approver` answers permission requests the policy profile leaves to the caller; return `true`, `false` or `{ allow, optionId }`. Without an approver such requests are denied. Errors are `RbridgeError` with rbridge's stable `code`.
+`options.onEvent` receives every event (`message.delta`, `tool.started`, `approval.required`, `turn.completed`, ...). `options.approver` answers permission requests the policy profile leaves to the caller; return `true`, `false` or `{ allow, optionId, remember }`, where `remember` allows the same kind of request for the rest of the session. Without an approver such requests are denied. Errors are `RbridgeError` with rbridge's stable `code`.
 
 Sessions are visible only to the `client` name that opened them.
 

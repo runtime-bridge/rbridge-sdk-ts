@@ -85,7 +85,8 @@ export interface ApprovalRequest {
   options: Array<{ id: string; kind: string; name?: string }>;
 }
 
-export type ApprovalAnswer = boolean | { allow: boolean; optionId?: string };
+/** remember allows the same tool and kind for the rest of the session. */
+export type ApprovalAnswer = boolean | { allow: boolean; optionId?: string; remember?: boolean };
 
 export interface SessionOptions {
   onEvent?: (event: Event) => void;

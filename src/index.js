@@ -297,16 +297,18 @@ export class Client {
   async #answer(sessionId, request, approver) {
     let allow = false;
     let optionId;
+    let remember = false;
     if (approver) {
       try {
         const d = await approver(request);
         allow = d === true || d?.allow === true;
         optionId = typeof d === "object" ? d.optionId : undefined;
+        remember = typeof d === "object" && d.remember === true;
       } catch {
         allow = false;
       }
     }
-    await this.t.call("approvals.answer", { session_id: sessionId, approval_id: request.id, allow, option_id: optionId }).catch(() => {});
+    await this.t.call("approvals.answer", { session_id: sessionId, approval_id: request.id, allow, option_id: optionId, remember }).catch(() => {});
   }
 
   /** Runs a task in a new session and closes it. */

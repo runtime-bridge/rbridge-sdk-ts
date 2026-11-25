@@ -88,6 +88,12 @@ test("approvals reach the approver", async () => {
     fs.rmSync(path.join(p.workspace, "notes.txt"));
     const denied = await c.run({ workspace: p.workspace, prompt: "write", profile: "controlled" });
     assert.equal(denied.output, "denied");
+    let count = 0;
+    const s = await c.open({ workspace: p.workspace, profile: "controlled" }, { approver: () => (count++, { allow: true, remember: true }) });
+    assert.equal((await s.prompt("write")).output, "allowed");
+    assert.equal((await s.prompt("write")).output, "allowed");
+    await s.close();
+    assert.equal(count, 1, "remember must spare the second question");
     c.close();
   } finally {
     await p.stop();

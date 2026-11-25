@@ -15,5 +15,5 @@
   "scripts": {
     "test": "node --test test/*.test.js"
   },
-  "repository": { "type": "git", "url": "https://github.com/rbridge/rbridge-sdk-ts" }
+  "repository": { "type": "git", "url": "https://github.com/runtime-bridge/rbridge-sdk-ts" }
 }
