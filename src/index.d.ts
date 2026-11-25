@@ -43,6 +43,8 @@ export interface Task {
   provider?: string;
   requirements?: string[];
   profile?: "observe" | "standard" | "controlled" | "custom";
+  /** Run the runtime in an OS sandbox (Linux): writes limited to the workspace, and with "full" no network. */
+  sandbox?: "off" | "files" | "full";
   mcp_servers?: Array<Record<string, unknown>>;
   output_schema?: unknown;
   /** Nanoseconds. */
