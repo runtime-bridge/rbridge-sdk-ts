@@ -10,6 +10,7 @@ import fs from "node:fs";
 import { effectiveEnv, startDaemon } from "./bundle.js";
 
 export { bundledBinary, findBinary, projectHome, startDaemon } from "./bundle.js";
+export { Chat, Rbridge, Response, Stream } from "./simple.js";
 
 export const PROTOCOL_VERSION = 1;
 

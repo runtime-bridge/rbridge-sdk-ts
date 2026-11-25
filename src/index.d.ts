@@ -218,3 +218,74 @@ export declare function runtimeDir(env?: Record<string, string | undefined>): st
 /** A daemon that is not running is started first (the bundled rbridge, RBRIDGE_BIN or rbridge on PATH) unless start is false. */
 export declare function connect(options?: { socket?: string; client?: string; env?: Record<string, string | undefined>; start?: boolean }): Promise<Client>;
 export declare function connectHTTP(options?: { url?: string; token?: string; client?: string; env?: Record<string, string | undefined> }): Promise<Client>;
+
+// ------------------------------------------------------------ everyday API
+
+export type Approve = boolean | "allow" | "deny" | "read" | ((request: any) => boolean | Promise<boolean>);
+
+export interface RunOptions {
+  /** A runtime id from rb.runtimes(), such as "claude-code". Unset lets rbridge choose. */
+  runtime?: string;
+  model?: string;
+  /** Defaults to the current folder. */
+  workspace?: string;
+  /** Skill ids, or folders of skills your program ships (added and trusted as reviewed). */
+  skills?: string[];
+  /** "observe" (read-only), "standard", "controlled" or "custom". */
+  profile?: string;
+  /** What to do when the runtime asks permission. Default false: deny. */
+  approve?: Approve;
+  sandbox?: "files" | "full";
+  /** Seconds. */
+  timeout?: number;
+}
+
+export interface RbridgeOptions extends RunOptions {
+  maxConcurrency?: number;
+  /** No new run starts once this many US dollars have been spent. */
+  maxCostUsd?: number;
+  /** The client name the daemon sees. */
+  app?: string;
+  env?: Record<string, string | undefined>;
+  client?: Client;
+}
+
+export declare class Response {
+  text: string;
+  runtime: string;
+  sessionId: string;
+  stopReason: string;
+  usage: { inputTokens: number; outputTokens: number; costUsd: number };
+  /** The answer parsed as JSON when a schema was given, else null. */
+  data: any;
+  raw: Result;
+}
+
+export declare class Stream implements AsyncIterable<string> {
+  response: Response | null;
+  events: Event[];
+  [Symbol.asyncIterator](): AsyncIterator<string>;
+  /** Waits for the whole answer and returns its text. */
+  text(): Promise<string>;
+}
+
+export declare class Chat {
+  readonly id: string | null;
+  send(prompt: Prompt, options?: { stream?: false }): Promise<Response>;
+  send(prompt: Prompt, options: { stream: true }): Promise<Stream>;
+  close(): Promise<void>;
+}
+
+export declare class Rbridge {
+  constructor(options?: RbridgeOptions);
+  usage: { inputTokens: number; outputTokens: number; costUsd: number };
+  /** The lower-level Client, connected on first use. */
+  client(): Promise<Client>;
+  run(prompt: Prompt, options?: RunOptions & { stream?: false; schema?: object; onEvent?: (e: Event) => void }): Promise<Response>;
+  run(prompt: Prompt, options: RunOptions & { stream: true; schema?: object; onEvent?: (e: Event) => void }): Promise<Stream>;
+  runMany(prompts: Array<Prompt | ({ prompt: Prompt } & RunOptions)>, options?: RunOptions & { returnExceptions?: boolean; maxConcurrency?: number; schema?: object }): Promise<Array<Response | Error>>;
+  chat(options?: RunOptions): Chat;
+  runtimes(): Promise<Array<{ id: string; name: string; available: boolean; version?: string }>>;
+  addSkills(source: string | string[], options?: { trust?: string; only?: string[]; exclude?: string[] }): Promise<string[]>;
+  close(): Promise<void>;
+}
