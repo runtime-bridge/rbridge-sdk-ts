@@ -7,6 +7,10 @@ import os from "node:os";
 import path from "node:path";
 import fs from "node:fs";
 
+import { effectiveEnv, startDaemon } from "./bundle.js";
+
+export { bundledBinary, findBinary, projectHome, startDaemon } from "./bundle.js";
+
 export const PROTOCOL_VERSION = 1;
 
 /** Error carrying one of rbridge's stable error codes. */
@@ -62,11 +66,22 @@ export function socketPath(env = process.env) {
 }
 
 /**
- * Connects to the daemon over IPC.
- * @param {{socket?: string, client?: string, env?: object}} [options]
+ * Connects to the daemon over IPC. With rbridge bundled in this package and
+ * RBRIDGE_HOME unset, the daemon is this project's (its data in the project's
+ * .rbridge folder). With start set, a daemon that is not running is started
+ * first, using the bundled rbridge, RBRIDGE_BIN or rbridge on PATH.
+ * @param {{socket?: string, client?: string, env?: object, start?: boolean}} [options]
  */
 export async function connect(options = {}) {
-  const socket = options.socket ?? socketPath(options.env);
+  const env = effectiveEnv(options.env);
+  if (options.start && !options.socket) {
+    try {
+      (await IPCTransport.open(socketPath(env))).close();
+    } catch {
+      startDaemon(env);
+    }
+  }
+  const socket = options.socket ?? socketPath(env);
   const transport = await IPCTransport.open(socket);
   const client = new Client(transport);
   await transport.call("initialize", { client: options.client ?? "default", protocol_version: PROTOCOL_VERSION });
@@ -81,7 +96,7 @@ export async function connect(options = {}) {
 export async function connectHTTP(options = {}) {
   let { url, token } = options;
   if (!url || !token) {
-    const dir = runtimeDir(options.env);
+    const dir = runtimeDir(effectiveEnv(options.env));
     const state = JSON.parse(fs.readFileSync(path.join(dir, "daemon.json"), "utf8"));
     url ??= state.http;
     token ??= fs.readFileSync(path.join(dir, "daemon.token"), "utf8").trim();

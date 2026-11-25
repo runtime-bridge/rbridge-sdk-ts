@@ -184,6 +184,15 @@ export interface AddSkillsResult {
   dry_run?: boolean;
 }
 
+/** The rbridge program from this machine's platform package, or null when none is installed. */
+export declare function bundledBinary(): string | null;
+/** RBRIDGE_BIN, else the bundled program, else rbridge on PATH. */
+export declare function findBinary(env?: Record<string, string | undefined>): string | null;
+/** The project's .rbridge folder that a bundled rbridge uses when RBRIDGE_HOME is unset, or null. */
+export declare function projectHome(): string | null;
+/** Starts the daemon for this environment's rbridge home, if none is running. */
+export declare function startDaemon(env?: Record<string, string | undefined>): void;
+
 export declare class Client {
   providers(options?: { refresh?: boolean }): Promise<any[]>;
   skills(): Promise<any[]>;
@@ -205,5 +214,6 @@ export declare class Client {
 export declare function text(s: string): ContentBlock[];
 export declare function socketPath(env?: Record<string, string | undefined>): string;
 export declare function runtimeDir(env?: Record<string, string | undefined>): string;
-export declare function connect(options?: { socket?: string; client?: string; env?: Record<string, string | undefined> }): Promise<Client>;
+/** With start, a daemon that is not running is started first (the bundled rbridge, RBRIDGE_BIN or rbridge on PATH). */
+export declare function connect(options?: { socket?: string; client?: string; env?: Record<string, string | undefined>; start?: boolean }): Promise<Client>;
 export declare function connectHTTP(options?: { url?: string; token?: string; client?: string; env?: Record<string, string | undefined> }): Promise<Client>;
