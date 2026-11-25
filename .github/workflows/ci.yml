@@ -60,10 +60,10 @@ jobs:
       - name: Install into a fresh project and use the bundled rbridge
         run: |
           plat=$(node -p 'process.platform + "-" + process.arch')
-          for d in rbridge-sdk-ts/dist/sdk "rbridge-sdk-ts/dist/rbridge-$plat"; do (cd "$d" && npm pack --pack-destination "$GITHUB_WORKSPACE"); done
+          for d in rbridge-sdk-ts/dist/sdk "rbridge-sdk-ts/dist/$plat"; do (cd "$d" && npm pack --pack-destination "$GITHUB_WORKSPACE"); done
           mkdir app && cd app && npm init -y
-          npm install --no-audit --no-fund ../runtime-bridge-sdk-*.tgz "../runtime-bridge-rbridge-$plat-"*.tgz
+          npm install --no-audit --no-fund ../rbridge-sdk-*.tgz "../rbridge-$plat-"*.tgz
           npx rbridge version
           npx rbridge init
           test -f .rbridge/config/config.yaml
-          node -e 'import("@runtime-bridge/sdk").then((m) => { if (!m.bundledBinary()) process.exit(1); console.log(m.projectHome()); })'
+          node -e 'import("@rbridge/sdk").then((m) => { if (!m.bundledBinary()) process.exit(1); console.log(m.projectHome()); })'

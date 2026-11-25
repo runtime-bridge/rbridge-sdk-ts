@@ -1,5 +1,5 @@
 {
-  "name": "@runtime-bridge/sdk",
+  "name": "@rbridge/sdk",
   "version": "0.1.0",
   "description": "Client for the rbridge daemon: use the agent runtimes installed on your machine from Node.js",
   "license": "Apache-2.0",

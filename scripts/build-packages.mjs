@@ -8,7 +8,7 @@
 //
 //   dist/sdk                        the SDK, with the rbridge command and one
 //                                   optional dependency per platform
-//   dist/rbridge-<platform>-<arch>  one package per platform with its binary,
+//   dist/<platform>-<arch>          one package per platform with its binary,
 //                                   limited to that platform by os and cpu
 //
 // The package.json in the repository stays a plain client, so installing the
@@ -49,8 +49,8 @@ for (const [goos, goarch, platform, arch] of targets) {
     console.error(`skip ${platform}-${arch}: no ${src}`);
     continue;
   }
-  const name = `${scope}/rbridge-${platform}-${arch}`;
-  const dir = path.join(out, `rbridge-${platform}-${arch}`);
+  const name = `${scope}/${platform}-${arch}`;
+  const dir = path.join(out, `${platform}-${arch}`);
   fs.mkdirSync(path.join(dir, "bin"), { recursive: true });
   fs.copyFileSync(src, path.join(dir, "bin", "rbridge" + ext));
   fs.chmodSync(path.join(dir, "bin", "rbridge" + ext), 0o755);

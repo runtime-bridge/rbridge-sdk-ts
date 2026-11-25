@@ -1,8 +1,8 @@
 name: release
 
-# Publishes @runtime-bridge/sdk and its per-platform rbridge packages to npm
+# Publishes @rbridge/sdk and its per-platform rbridge packages to npm
 # when a v* tag is pushed. RBRIDGE_VERSION names the rbridge release they
-# carry. Needs an npm organisation named runtime-bridge and an NPM_TOKEN
+# carry. Needs an npm organisation named rbridge and an NPM_TOKEN
 # secret with publish rights to it.
 
 on:
@@ -42,7 +42,7 @@ jobs:
       - name: Publish
         working-directory: rbridge-sdk-ts/dist
         run: |
-          for d in rbridge-*/; do (cd "$d" && npm publish --access public --provenance); done
+          for d in */; do [ "$d" = sdk/ ] && continue; (cd "$d" && npm publish --access public --provenance); done
           cd sdk && npm publish --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
