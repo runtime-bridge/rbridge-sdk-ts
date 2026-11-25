@@ -40,19 +40,26 @@ console.log((await rb.run("Summarise README.md")).text);
 
 That is all the setup there is: `new Rbridge()` finds rbridge (or the copy that came with this package), starts its daemon if it is not running, and the workspace is the current folder. `runtime` is any id from `await rb.runtimes()`, such as `claude-code`, `opencode` or `codex`; leave it out and rbridge picks one.
 
-**Stream** the answer as it is written:
+**Stream** the answer as it is written. It is printed for you, and `run` still resolves to the whole answer:
 
 ```js
-for await (const chunk of await rb.run("Explain app.js", { stream: true })) process.stdout.write(chunk);
+await rb.run("Explain app.js", { stream: true });
 ```
 
-**Chat**, keeping the conversation:
+**Set it all once.** Options given to `new Rbridge({...})` apply to every call. With `chat: true` each `run` continues the same conversation, and an array sends several messages in one call:
 
 ```js
-const chat = rb.chat();
-await chat.send("What does app.js do?");
-console.log((await chat.send("Now write tests for it")).text);
+const rb = new Rbridge({ runtime: "claude-code", chat: true, stream: true });
+
+await rb.run("What does app.js do?");
+await rb.run("Now write tests for it");
+await rb.run(["Summarise the tests", "Shorter"]);
+await rb.reset();                              // start a new conversation
 ```
+
+Any call can still override a default (`rb.run("...", { stream: false })`), and `rb.chat()` gives a separate conversation object when you want several at once (`chat.send(...)`).
+
+To handle the chunks yourself, pass a function, `{ stream: (chunk) => ... }`, or take the iterator, `for await (const chunk of rb.stream("..."))`.
 
 **Run several at once**, in order:
 
@@ -83,8 +90,10 @@ Every option can be set on `new Rbridge({...})` as a default and overridden on a
 | `timeout` | Seconds per run |
 | `maxConcurrency` | How many `runMany` runs go at once (rbridge still applies its own limits) |
 | `maxCostUsd` | After this much is spent, no new run starts (`rb.usage` has the running total) |
+| `stream` | `true` prints answers as they are written; a function receives the chunks instead |
+| `chat` | `true` makes every `run` continue one conversation |
 
-A `Response` has `text`, `data` (with a schema), `runtime`, `sessionId`, `stopReason`, `usage` and `raw`. A `Stream` yields text; afterwards `stream.response` is the `Response` and `stream.events` every event (tools, plans, usage). Pass `onEvent` to `run` to see events as they happen. Errors are `RbridgeError` with a stable `code`. Call `rb.close()` when you are done.
+A `Response` has `text`, `data` (with a schema), `runtime`, `sessionId`, `stopReason`, `usage` and `raw`. The `Stream` from `rb.stream()` yields text; afterwards `stream.response` is the `Response` and `stream.events` every event (tools, plans, usage). Pass `onEvent` to `run` to see events as they happen. Errors are `RbridgeError` with a stable `code`. Call `rb.close()` when you are done.
 
 ## Lower-level API
 
