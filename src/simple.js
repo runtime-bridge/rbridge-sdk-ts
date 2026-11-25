@@ -65,18 +65,31 @@ export class Stream {
     this.wake = null;
     this.done = false;
     this.error = null;
+    let streamed = "";
+    let ended = false;
     const onEvent = (ev) => {
+      if (ended) return;
       this.events.push(ev);
-      if (ev.type === "message.delta") this.#push(ev.data?.text ?? "");
+      if (ev.type === "message.delta") {
+        const chunk = ev.data?.text ?? "";
+        streamed += chunk;
+        this.#push(chunk);
+      }
     };
     this.finished = start(onEvent).then(
       (raw) => {
         this.response = new Response(raw);
+        // Deltas can trail the result; whatever has not arrived yet is taken
+        // from the result, so the chunks always add up to it.
+        ended = true;
+        const text = this.response.text;
+        if (text.startsWith(streamed) && text.length > streamed.length) this.#push(text.slice(streamed.length));
       },
       (err) => {
         this.error = err;
       },
     ).finally(() => {
+      ended = true;
       this.done = true;
       this.wake?.();
     });
@@ -309,6 +322,18 @@ export class Chat {
     this.session = null;
     this.sink = null;
     this.turn = Promise.resolve();
+    this.seen = new Set();
+    this.ended = new Set();
+  }
+
+  // Events from a turn that has ended (they can trail its result) never reach
+  // the next turn's stream.
+  #events(ev) {
+    if (ev.turn_id) {
+      if (this.ended.has(ev.turn_id)) return;
+      this.seen.add(ev.turn_id);
+    }
+    this.sink?.(ev);
   }
 
   get id() {
@@ -321,12 +346,13 @@ export class Chat {
       const run = this.turn.then(async () => {
         this.sink = sink;
         try {
-          this.session ??= await this.rb._open(prompt, this.options, (ev) => this.sink?.(ev));
+          this.session ??= await this.rb._open(prompt, this.options, (ev) => this.#events(ev));
           const raw = await this.session.prompt(prompt);
           this.rb._count(raw);
           return raw;
         } finally {
           this.sink = null;
+          for (const id of this.seen) this.ended.add(id);
         }
       });
       this.turn = run.catch(() => {});
