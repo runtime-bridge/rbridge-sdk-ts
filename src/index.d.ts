@@ -88,10 +88,45 @@ export interface ApprovalRequest {
 /** remember allows the same tool and kind for the rest of the session. */
 export type ApprovalAnswer = boolean | { allow: boolean; optionId?: string; remember?: boolean };
 
+export interface InputRequest {
+  id: string;
+  session_id: string;
+  message: string;
+  mode: "form" | "url";
+  /** JSON schema of the form, for mode "form". */
+  schema?: Record<string, unknown>;
+  /** Page the user should open, for mode "url". rbridge never opens it. */
+  url?: string;
+}
+
+export interface InputAnswer {
+  action: "accept" | "decline" | "cancel";
+  content?: Record<string, unknown>;
+}
+
 export interface SessionOptions {
   onEvent?: (event: Event) => void;
   approver?: (request: ApprovalRequest) => ApprovalAnswer | Promise<ApprovalAnswer>;
+  /** Answers questions the runtime asks. Without it they are declined. */
+  onInput?: (request: InputRequest) => InputAnswer | Promise<InputAnswer>;
   model?: string;
+  /** Runtime session mode to switch to once the session opens. */
+  mode?: string;
+}
+
+export interface Mode {
+  id: string;
+  name: string;
+  description?: string;
+}
+
+export interface ConfigOption {
+  id: string;
+  name: string;
+  description?: string;
+  type: "select" | "boolean";
+  current: string;
+  options?: { value: string; name?: string }[];
 }
 
 export interface SessionRecord {
@@ -114,6 +149,10 @@ export declare class Session {
   prompt(prompt: Prompt): Promise<Result>;
   cancel(): Promise<unknown>;
   close(): Promise<void>;
+  modes(): Promise<{ current: string; modes: Mode[] }>;
+  setMode(mode: string): Promise<{ current: string; modes: Mode[] }>;
+  options(): Promise<ConfigOption[]>;
+  setOption(optionId: string, value: string | boolean): Promise<ConfigOption[]>;
 }
 
 export declare class Client {

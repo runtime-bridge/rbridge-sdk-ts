@@ -99,3 +99,35 @@ test("approvals reach the approver", async () => {
     await p.stop();
   }
 });
+
+test("modes and options over IPC and HTTP", async () => {
+  for (const c of [await connect({ env: d.env }), await connectHTTP({ env: d.env })]) {
+    const s = await c.open({ workspace: d.workspace }, { mode: "code" });
+    const m = await s.modes();
+    assert.equal(m.current, "code");
+    assert.deepEqual(m.modes.map((x) => x.id), ["ask", "code"]);
+    await s.setMode("ask");
+    const opts = await s.setOption("model", "large");
+    assert.equal(opts[0].current, "large");
+    assert.equal((await s.prompt("mode?")).output, "mode: ask model: large");
+    await assert.rejects(s.setMode("nope"), (e) => e instanceof RbridgeError && e.code === "invalid_input");
+    await s.close();
+    c.close();
+  }
+});
+
+test("runtime questions reach onInput", async () => {
+  const e = await startDaemon("elicit");
+  try {
+    const c = await connect({ env: e.env });
+    let asked;
+    const res = await c.run({ workspace: e.workspace, prompt: "x" }, { onInput: (req) => ((asked = req), { action: "accept", content: { name: "Ada" } }) });
+    assert.equal(res.output, "hello Ada");
+    assert.equal(asked.mode, "form");
+    assert.ok(asked.schema.properties.name);
+    assert.equal((await c.run({ workspace: e.workspace, prompt: "x" })).output, "declined");
+    c.close();
+  } finally {
+    await e.stop();
+  }
+});

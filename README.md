@@ -33,6 +33,16 @@ rb.close();
 
 `options.onEvent` receives every event (`message.delta`, `tool.started`, `approval.required`, `turn.completed`, ...). `options.approver` answers permission requests the policy profile leaves to the caller; return `true`, `false` or `{ allow, optionId, remember }`, where `remember` allows the same kind of request for the rest of the session. Without an approver such requests are denied. Errors are `RbridgeError` with rbridge's stable `code`.
 
+`options.onInput` answers questions the runtime asks the user, as a form (`request.schema`) or a page to open (`request.url`, which rbridge never opens): return `{ action: "accept", content }`, `{ action: "decline" }` or `{ action: "cancel" }`. Without it such questions are declined.
+
+ACP runtimes that offer session modes and settings expose them on the session; Claude Code does not, as its permission modes could bypass policy:
+
+```js
+const s = await client.open({ workspace: "/path/to/project" }, { mode: "code" });
+console.log(await s.modes());           // { current: "code", modes: [...] }
+await s.setOption("model", "large");
+```
+
 Sessions are visible only to the `client` name that opened them.
 
 ## Develop

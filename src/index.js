@@ -203,13 +203,23 @@ class HTTPTransport {
       case "sessions.open":
         return this.request("POST", "/v1/sessions", params);
       case "sessions.resume":
-        return this.request("POST", `/v1/sessions/${id}/resume`, { model: params.model });
+        return this.request("POST", `/v1/sessions/${id}/resume`, { model: params.model, input: params.input });
       case "sessions.prompt":
         return this.request("POST", `/v1/sessions/${id}/turns`, { prompt: params.prompt, wait: params.wait });
       case "sessions.cancel":
         return this.request("POST", `/v1/sessions/${id}/cancel`, {});
       case "sessions.close":
         return this.request("DELETE", `/v1/sessions/${id}`);
+      case "sessions.modes":
+        return this.request("GET", `/v1/sessions/${id}/modes`);
+      case "sessions.set_mode":
+        return this.request("PUT", `/v1/sessions/${id}/mode`, { mode: params.mode });
+      case "sessions.options":
+        return this.request("GET", `/v1/sessions/${id}/options`);
+      case "sessions.set_option":
+        return this.request("PUT", `/v1/sessions/${id}/options/${encodeURIComponent(params.option_id)}`, { value: params.value });
+      case "inputs.answer":
+        return this.request("POST", `/v1/sessions/${encodeURIComponent(params.session_id)}/inputs/${encodeURIComponent(params.input_id)}`, params);
       case "approvals.answer":
         return this.request("POST", `/v1/sessions/${encodeURIComponent(params.session_id)}/approvals/${encodeURIComponent(params.approval_id)}`, params);
       case "daemon.status":
@@ -276,12 +286,12 @@ export class Client {
    * decides approval requests (without one they are denied).
    */
   async open(task, options = {}) {
-    const record = await this.t.call("sessions.open", { task: { ...task, prompt: task.prompt ? toPrompt(task.prompt) : undefined }, model: options.model });
+    const record = await this.t.call("sessions.open", { task: { ...task, prompt: task.prompt ? toPrompt(task.prompt) : undefined }, model: options.model, mode: options.mode, input: typeof options.onInput === "function" });
     return this.#attach(record, options);
   }
 
   async resume(id, options = {}) {
-    const record = await this.t.call("sessions.resume", { id, model: options.model });
+    const record = await this.t.call("sessions.resume", { id, model: options.model, input: typeof options.onInput === "function" });
     return this.#attach(record, options);
   }
 
@@ -290,6 +300,7 @@ export class Client {
     session.unsubscribe = await this.t.subscribe(record.id, (ev) => {
       options.onEvent?.(ev);
       if (ev.type === "approval.required") this.#answer(record.id, ev.data, options.approver);
+      if (ev.type === "input.required" && options.onInput) this.#input(record.id, ev.data, options.onInput);
     });
     return session;
   }
@@ -309,6 +320,19 @@ export class Client {
       }
     }
     await this.t.call("approvals.answer", { session_id: sessionId, approval_id: request.id, allow, option_id: optionId, remember }).catch(() => {});
+  }
+
+  async #input(sessionId, request, onInput) {
+    let answer;
+    try {
+      answer = await onInput(request);
+    } catch {
+      answer = { action: "decline" };
+    }
+    if (!answer || typeof answer !== "object") answer = { action: answer ? "accept" : "decline" };
+    await this.t
+      .call("inputs.answer", { session_id: sessionId, input_id: request.id, action: answer.action ?? "accept", content: answer.content })
+      .catch(() => {});
   }
 
   /** Runs a task in a new session and closes it. */
@@ -340,6 +364,24 @@ export class Session {
 
   cancel() {
     return this.t.call("sessions.cancel", { id: this.id });
+  }
+
+  /** Returns { current, modes } for runtimes that offer session modes. */
+  modes() {
+    return this.t.call("sessions.modes", { id: this.id });
+  }
+
+  setMode(mode) {
+    return this.t.call("sessions.set_mode", { id: this.id, mode });
+  }
+
+  /** Returns the runtime's session settings, such as its model. */
+  options() {
+    return this.t.call("sessions.options", { id: this.id });
+  }
+
+  setOption(optionId, value) {
+    return this.t.call("sessions.set_option", { id: this.id, option_id: optionId, value });
   }
 
   async close() {
