@@ -1,0 +1,48 @@
+name: release
+
+# Publishes @runtime-bridge/sdk and its per-platform rbridge packages to npm
+# when a v* tag is pushed. RBRIDGE_VERSION names the rbridge release they
+# carry. Needs an npm organisation named runtime-bridge and an NPM_TOKEN
+# secret with publish rights to it.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: rbridge-sdk-ts
+      - id: rbridge
+        run: echo "ref=$(cat rbridge-sdk-ts/RBRIDGE_VERSION)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        with:
+          repository: runtime-bridge/rbridge
+          ref: ${{ steps.rbridge.outputs.ref }}
+          path: rbridge
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: rbridge/go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - run: make cross VERSION=${{ steps.rbridge.outputs.ref }}
+        working-directory: rbridge
+      - run: node scripts/build-packages.mjs --binaries ../rbridge/bin
+        working-directory: rbridge-sdk-ts
+      # Platform packages first, so the SDK's optional dependencies exist when it is published.
+      - name: Publish
+        working-directory: rbridge-sdk-ts/dist
+        run: |
+          for d in rbridge-*/; do (cd "$d" && npm publish --access public --provenance); done
+          cd sdk && npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
