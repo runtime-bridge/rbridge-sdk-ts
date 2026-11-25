@@ -74,8 +74,10 @@ test("a skill folder is added and used, and the budget stops new runs", async ()
   const dir = path.join(d.home, "src", "calm");
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, "SKILL.md"), "---\nname: calm\ndescription: Keep a calm tone.\n---\nBe calm.\n");
-  const rb = make();
-  assert.equal((await rb.run("x", { skills: [dir] })).raw.skills[0].skill_id, "calm");
+  const rb = make({ runtime: "fake" });
+  // The fake runtime cannot load skills, so the run is refused, but only after the folder was added and trusted.
+  await assert.rejects(rb.run("x", { skills: [dir] }), (e) => e.code === "capability_unavailable");
+  assert.ok((await (await rb.client()).skills()).some((s) => s.id === "calm" && s.trust === "reviewed"));
   assert.deepEqual(await rb.addSkills(path.dirname(dir)), ["calm"]);
   await rb.close();
   const broke = make({ maxCostUsd: 0 });
