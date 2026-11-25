@@ -142,6 +142,10 @@ test("skills can be added and trusted", async () => {
     assert.equal((await c.setSkillTrust("ts-style", "reviewed")).trust, "reviewed");
     assert.ok((await c.skills()).some((s) => s.id === "ts-style"));
     await assert.rejects(c.searchSkills("x"), (e) => e.code === "invalid_input");
+    const many = await c.addSkills(path.dirname(dir), { only: ["ts-*"], trust: "trusted" });
+    assert.deepEqual(many.items.map((i) => [i.id, i.status]), [["ts-style", "unchanged"]]);
+    assert.equal(many.items[0].result.record.trust, "trusted");
+    await assert.rejects(c.addSkills(path.dirname(dir), { only: ["nosuch"] }), (e) => e.code === "skill_not_found");
     c.close();
   }
 });

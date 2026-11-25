@@ -198,6 +198,8 @@ class HTTPTransport {
         return this.request("GET", "/v1/skills");
       case "skills.add":
         return this.request("POST", "/v1/skills", params);
+      case "skills.add_many":
+        return this.request("POST", "/v1/skills/batch", params);
       case "skills.trust":
         return this.request("PUT", `/v1/skills/${id}/trust`, { trust: params.trust });
       case "skills.search":
@@ -282,6 +284,25 @@ export class Client {
   /** Adds a skill folder on this machine to rbridge's library. New skills start unreviewed. */
   addSkill(dir, { link = false } = {}) {
     return this.t.call("skills.add", { path: path.resolve(dir), link });
+  }
+
+  /**
+   * Adds every skill found in one or more folders (each a skill, or a folder
+   * holding skills), or in a Git repository when the source is a URL. Options:
+   * only and exclude (names or patterns such as "metric-*"), trust (applied to
+   * every skill added), dryRun, link, and for Git rev and subdirs. One skill
+   * failing does not stop the others; each item has a status.
+   */
+  addSkills(source, { only, exclude, trust, dryRun = false, link = false, rev, subdirs } = {}) {
+    const sources = Array.isArray(source) ? source : [source];
+    const isGit = (s) => s.includes("://") || s.startsWith("git@");
+    const params = { only, exclude, trust, dry_run: dryRun, link };
+    if (sources.length === 1 && isGit(sources[0])) {
+      Object.assign(params, { url: sources[0], rev, subdirs });
+    } else {
+      params.paths = sources.map((s) => path.resolve(s));
+    }
+    return this.t.call("skills.add_many", params);
   }
 
   /** Installs "catalog:id" or "id" from a configured skill catalog. */

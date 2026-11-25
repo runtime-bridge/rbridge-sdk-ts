@@ -157,11 +157,40 @@ export declare class Session {
   setOption(optionId: string, value: string | boolean): Promise<ConfigOption[]>;
 }
 
+export interface AddSkillsOptions {
+  /** Add only the skills with these names or patterns, such as "metric-*". */
+  only?: string[];
+  /** Leave out the skills with these names or patterns. */
+  exclude?: string[];
+  /** Trust state set on every skill added. */
+  trust?: "unreviewed" | "reviewed" | "trusted" | "restricted" | "blocked";
+  /** Find and check the skills without installing any. */
+  dryRun?: boolean;
+  link?: boolean;
+  /** Git only: the revision, and folders inside the repository (default: all of it). */
+  rev?: string;
+  subdirs?: string[];
+}
+
+export interface AddSkillsResult {
+  items: Array<{
+    id?: string;
+    source: string;
+    status: "added" | "updated" | "unchanged" | "would_add" | "skipped" | "failed";
+    result?: { record: { id: string; digest: string; trust: string }; warnings?: string[]; unchanged?: boolean };
+    reason?: string;
+  }>;
+  warnings?: string[];
+  dry_run?: boolean;
+}
+
 export declare class Client {
   providers(options?: { refresh?: boolean }): Promise<any[]>;
   skills(): Promise<any[]>;
   /** Adds a skill folder on this machine to rbridge's library; it starts unreviewed. */
   addSkill(dir: string, options?: { link?: boolean }): Promise<{ record: { id: string; digest: string; trust: string }; warnings?: string[]; unchanged?: boolean }>;
+  /** Adds every skill found in folders (or a Git repository), with filters; see AddSkillsOptions. */
+  addSkills(source: string | string[], options?: AddSkillsOptions): Promise<AddSkillsResult>;
   addCatalogSkill(ref: string): Promise<{ record: { id: string; digest: string; trust: string } }>;
   setSkillTrust(id: string, trust: "unreviewed" | "reviewed" | "trusted" | "restricted" | "blocked"): Promise<{ id: string; trust: string }>;
   searchSkills(query?: string): Promise<{ skills: any[]; problems: string[] }>;

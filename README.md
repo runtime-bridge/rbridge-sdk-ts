@@ -40,6 +40,7 @@ rb.close();
 | `open(task, options)` / `resume(id, options)` | Session with `prompt()`, `cancel()`, `close()` |
 | `providers()`, `skills()`, `sessions()`, `status()` | Read the daemon's state |
 | `addSkill(dir)`, `setSkillTrust(id, trust)` | Add a skill your application ships and mark it reviewed |
+| `addSkills(dirs, { only, exclude, trust, dryRun })` | Add every skill found in one or more folders (or a Git repository), with filters |
 | `searchSkills(query)`, `addCatalogSkill(ref)` | Use configured skill catalogs |
 
 `options.onEvent` receives every event (`message.delta`, `tool.started`, `approval.required`, `turn.completed`, ...). `options.approver` answers permission requests the policy profile leaves to the caller; return `true`, `false` or `{ allow, optionId, remember }`, where `remember` allows the same kind of request for the rest of the session. Without an approver such requests are denied. Errors are `RbridgeError` with rbridge's stable `code`.
