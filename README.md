@@ -31,21 +31,81 @@ Until the packages are published, install from Git (`npm install github:runtime-
 ## Use
 
 ```js
+import { Rbridge } from "@rbridge/sdk";
+
+const rb = new Rbridge({ runtime: "claude-code" });
+
+console.log((await rb.run("Summarise README.md")).text);
+```
+
+That is all the setup there is: `new Rbridge()` finds rbridge (or the copy that came with this package), starts its daemon if it is not running, and the workspace is the current folder. `runtime` is any id from `await rb.runtimes()`, such as `claude-code`, `opencode` or `codex`; leave it out and rbridge picks one.
+
+**Stream** the answer as it is written:
+
+```js
+for await (const chunk of await rb.run("Explain app.js", { stream: true })) process.stdout.write(chunk);
+```
+
+**Chat**, keeping the conversation:
+
+```js
+const chat = rb.chat();
+await chat.send("What does app.js do?");
+console.log((await chat.send("Now write tests for it")).text);
+```
+
+**Run several at once**, in order:
+
+```js
+const answers = await rb.runMany(["Review a.js", "Review b.js", "Review c.js"]);
+// or with your own control: await Promise.all([rb.run("Review a.js"), rb.run("Review b.js")])
+```
+
+**Structured output**, parsed for you:
+
+```js
+const r = await rb.run("List the TODOs in this project", { schema: { type: "object", properties: { todos: { type: "array", items: { type: "string" } } } } });
+console.log(r.data.todos);
+```
+
+### Options
+
+Every option can be set on `new Rbridge({...})` as a default and overridden on any call:
+
+| Option | Meaning |
+|---|---|
+| `runtime`, `model` | Which runtime, and which of its models |
+| `workspace` | The folder the runtime works in; default the current folder |
+| `skills` | Skill ids, or folders of skills your program ships (added and trusted on first use) |
+| `profile` | `observe` (read-only), `standard` or `controlled` |
+| `approve` | When the runtime asks permission: `false` deny (default), `true` allow, `"read"` reads only, or a function given the request |
+| `sandbox` | `files` or `full`, on Linux |
+| `timeout` | Seconds per run |
+| `maxConcurrency` | How many `runMany` runs go at once (rbridge still applies its own limits) |
+| `maxCostUsd` | After this much is spent, no new run starts (`rb.usage` has the running total) |
+
+A `Response` has `text`, `data` (with a schema), `runtime`, `sessionId`, `stopReason`, `usage` and `raw`. A `Stream` yields text; afterwards `stream.response` is the `Response` and `stream.events` every event (tools, plans, usage). Pass `onEvent` to `run` to see events as they happen. Errors are `RbridgeError` with a stable `code`. Call `rb.close()` when you are done.
+
+## Lower-level API
+
+`await rb.client()` (or `connect()`) is the client underneath, for sessions you drive yourself, approvals with options, questions the runtime asks, modes and the daemon's state:
+
+```js
 import { connect } from "@rbridge/sdk";
 
-const rb = await connect({ client: "my-app" });
-const result = await rb.run(
+const c = await connect({ client: "my-app" });
+const result = await c.run(
   { workspace: "/home/me/project", prompt: "Review this project for security issues", skills: ["security-audit"] },
   {
     onEvent: (e) => e.type === "message.delta" && process.stdout.write(e.data.text),
-    approver: async (req) => req.kind === "read", // anything else is denied
+    approver: async (req) => req.kind === "read",
   },
 );
 console.log(result.output);
-rb.close();
+c.close();
 ```
 
-`connect()` starts a daemon when none is running, using the bundled rbridge (or `RBRIDGE_BIN`, or rbridge on `PATH`); a daemon started this way stops by itself after 30 idle minutes. Pass `start: false` to only connect to one already running. Tasks can be a plain prompt (`rb.run("Summarise README.md")`), and the workspace defaults to the current folder. `connect()` uses the daemon's Unix socket, found the same way rbridge finds it (`RBRIDGE_HOME`, XDG and OS defaults); pass `socket` to override. `connectHTTP()` uses the local HTTP API instead and reads the URL and token from the daemon's runtime directory; the daemon must have `daemon.http.enabled: true`.
+`connect()` starts a daemon when none is running (one that stops by itself after 30 idle minutes); pass `start: false` to only connect to a running one. It uses the daemon's Unix socket, found the same way rbridge finds it (`RBRIDGE_HOME`, XDG and OS defaults); pass `socket` to override. `connectHTTP()` uses the local HTTP API instead and reads the URL and token from the daemon's runtime directory; the daemon must have `daemon.http.enabled: true`.
 
 | Call | What it does |
 |---|---|
