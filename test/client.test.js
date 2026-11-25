@@ -131,3 +131,17 @@ test("runtime questions reach onInput", async () => {
     await e.stop();
   }
 });
+
+test("skills can be added and trusted", async () => {
+  const dir = path.join(d.home, "src", "ts-style");
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, "SKILL.md"), "---\nname: ts-style\ndescription: TypeScript style rules.\n---\nbody\n");
+  for (const c of [await connect({ env: d.env }), await connectHTTP({ env: d.env })]) {
+    const added = await c.addSkill(dir);
+    assert.equal(added.record.id, "ts-style");
+    assert.equal((await c.setSkillTrust("ts-style", "reviewed")).trust, "reviewed");
+    assert.ok((await c.skills()).some((s) => s.id === "ts-style"));
+    await assert.rejects(c.searchSkills("x"), (e) => e.code === "invalid_input");
+    c.close();
+  }
+});

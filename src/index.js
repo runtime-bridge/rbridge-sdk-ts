@@ -196,6 +196,12 @@ class HTTPTransport {
         return this.request("GET", "/v1/providers" + (params.refresh ? "?refresh=true" : ""));
       case "skills.list":
         return this.request("GET", "/v1/skills");
+      case "skills.add":
+        return this.request("POST", "/v1/skills", params);
+      case "skills.trust":
+        return this.request("PUT", `/v1/skills/${id}/trust`, { trust: params.trust });
+      case "skills.search":
+        return this.request("GET", "/v1/skills/search?q=" + encodeURIComponent(params.query ?? ""));
       case "sessions.list":
         return this.request("GET", "/v1/sessions");
       case "sessions.get":
@@ -271,6 +277,26 @@ export class Client {
 
   skills() {
     return this.t.call("skills.list");
+  }
+
+  /** Adds a skill folder on this machine to rbridge's library. New skills start unreviewed. */
+  addSkill(dir, { link = false } = {}) {
+    return this.t.call("skills.add", { path: path.resolve(dir), link });
+  }
+
+  /** Installs "catalog:id" or "id" from a configured skill catalog. */
+  addCatalogSkill(ref) {
+    return this.t.call("skills.add", { catalog: ref });
+  }
+
+  /** Sets unreviewed, reviewed, trusted, restricted or blocked. */
+  setSkillTrust(id, trust) {
+    return this.t.call("skills.trust", { id, trust });
+  }
+
+  /** Searches the configured skill catalogs. */
+  searchSkills(query = "") {
+    return this.t.call("skills.search", { query });
   }
 
   sessions() {

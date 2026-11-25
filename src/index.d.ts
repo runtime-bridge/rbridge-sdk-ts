@@ -160,6 +160,11 @@ export declare class Session {
 export declare class Client {
   providers(options?: { refresh?: boolean }): Promise<any[]>;
   skills(): Promise<any[]>;
+  /** Adds a skill folder on this machine to rbridge's library; it starts unreviewed. */
+  addSkill(dir: string, options?: { link?: boolean }): Promise<{ record: { id: string; digest: string; trust: string }; warnings?: string[]; unchanged?: boolean }>;
+  addCatalogSkill(ref: string): Promise<{ record: { id: string; digest: string; trust: string } }>;
+  setSkillTrust(id: string, trust: "unreviewed" | "reviewed" | "trusted" | "restricted" | "blocked"): Promise<{ id: string; trust: string }>;
+  searchSkills(query?: string): Promise<{ skills: any[]; problems: string[] }>;
   sessions(): Promise<SessionRecord[]>;
   status(): Promise<{ version: string; pid: number; started_at: string; sessions_open: number }>;
   open(task: Task, options?: SessionOptions): Promise<Session>;
