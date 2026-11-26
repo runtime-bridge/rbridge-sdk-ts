@@ -226,7 +226,8 @@ export type Approve = boolean | "allow" | "deny" | "read" | ((request: any) => b
 export interface RunOptions {
   /** A runtime id from rb.runtimes(), such as "claude-code". Unset lets rbridge choose. */
   runtime?: string;
-  model?: string;
+  /** "latest" (the runtime's newest flagship), "auto" (its own recommended choice), or a model name. */
+  model?: "latest" | "auto" | (string & {});
   /** Defaults to the current folder. */
   workspace?: string;
   /** Skill ids, or folders of skills your program ships (added and trusted as reviewed). */
@@ -262,6 +263,8 @@ export declare class Response {
   runtime: string;
   sessionId: string;
   stopReason: string;
+  /** The model that ran, as the runtime reported it. */
+  model: string;
   usage: { inputTokens: number; outputTokens: number; costUsd: number };
   /** The answer parsed as JSON when a schema was given, else null. */
   data: any;
@@ -300,7 +303,7 @@ export declare class Rbridge {
   reset(): Promise<void>;
   runMany(prompts: Array<Prompt | ({ prompt: Prompt } & RunOptions)>, options?: RunOptions & { returnExceptions?: boolean; maxConcurrency?: number; schema?: object }): Promise<Array<Response | Error>>;
   chat(options?: RunOptions): Chat;
-  runtimes(): Promise<Array<{ id: string; name: string; available: boolean; version?: string }>>;
+  runtimes(): Promise<Array<{ id: string; name: string; available: boolean; version?: string; models: Record<string, string> }>>;
   addSkills(source: string | string[], options?: { trust?: string; only?: string[]; exclude?: string[] }): Promise<string[]>;
   close(): Promise<void>;
 }

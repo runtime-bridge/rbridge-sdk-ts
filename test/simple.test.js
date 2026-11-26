@@ -119,6 +119,17 @@ test("options are checked and overridable", async () => {
   await rb.close();
 });
 
+test("models: a name, auto, and a typo", async () => {
+  const rb = make();
+  const r = await rb.run("mode?", { model: "large" });
+  assert.match(r.text, /model: large/);
+  assert.equal(r.model, "large");
+  assert.ok((await rb.run("mode?", { model: "auto" })).model);
+  await assert.rejects(rb.run("x", { model: "larg" }), (e) => e.code === "invalid_input" && /did you mean large\?/.test(e.message));
+  assert.ok("latest" in (await rb.runtimes()).find((x) => x.id === "fake").models);
+  await rb.close();
+});
+
 test("a skill folder is added and used, and the budget stops new runs", async () => {
   const dir = path.join(d.home, "src", "calm");
   fs.mkdirSync(dir, { recursive: true });

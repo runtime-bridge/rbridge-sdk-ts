@@ -61,7 +61,7 @@ Any call can still override a default (`rb.run("...", { stream: false })`), and 
 
 To handle the chunks yourself, pass a function, `{ stream: (chunk) => ... }`, or take the iterator, `for await (const chunk of rb.stream("..."))`.
 
-**Run several at once**, in order:
+**Run several at once**, in order. When rbridge is full (its session slots, or the per-client limit), runs wait their turn instead of failing, and errors rbridge marks as retryable are retried:
 
 ```js
 const answers = await rb.runMany(["Review a.js", "Review b.js", "Review c.js"]);
@@ -81,19 +81,21 @@ Every option can be set on `new Rbridge({...})` as a default and overridden on a
 
 | Option | Meaning |
 |---|---|
-| `runtime`, `model` | Which runtime, and which of its models |
+| `runtime` | Which runtime: an id from `runtimes()`; unset lets rbridge pick |
+| `model` | `"latest"` (the runtime's newest flagship), `"auto"` (its own recommended choice), or a model name the runtime accepts; unset uses its configured default. `runtimes()` lists each runtime's names, and `response.model` says which model ran |
 | `workspace` | The folder the runtime works in; default the current folder |
 | `skills` | Skill ids, or folders of skills your program ships (added and trusted on first use) |
 | `profile` | `observe` (read-only), `standard` or `controlled` |
 | `approve` | When the runtime asks permission: `false` deny (default), `true` allow, `"read"` reads only, or a function given the request |
 | `sandbox` | `files` or `full`, on Linux |
 | `timeout` | Seconds per run |
+| `queueTimeout` | Seconds a run may wait for rbridge to have room; unset waits as long as it takes, so runs queue instead of failing |
 | `maxConcurrency` | How many `runMany` runs go at once (rbridge still applies its own limits) |
 | `maxCostUsd` | After this much is spent, no new run starts (`rb.usage` has the running total) |
 | `stream` | `true` prints answers as they are written; a function receives the chunks instead |
 | `chat` | `true` makes every `run` continue one conversation |
 
-A `Response` has `text`, `data` (with a schema), `runtime`, `sessionId`, `stopReason`, `usage` and `raw`. The `Stream` from `rb.stream()` yields text; afterwards `stream.response` is the `Response` and `stream.events` every event (tools, plans, usage). Pass `onEvent` to `run` to see events as they happen. Errors are `RbridgeError` with a stable `code` (the list is at https://runtime-bridge.github.io/docs/errors/); `budget_exceeded` means `maxCostUsd` is spent. Call `rb.close()` when you are done.
+A `Response` has `text`, `data` (with a schema), `runtime`, `model`, `sessionId`, `stopReason`, `usage` and `raw`. The `Stream` from `rb.stream()` yields text; afterwards `stream.response` is the `Response` and `stream.events` every event (tools, plans, usage). Pass `onEvent` to `run` to see events as they happen. Errors are `RbridgeError` with a stable `code` (the list is at https://runtime-bridge.github.io/docs/errors/); `budget_exceeded` means `maxCostUsd` is spent. Call `rb.close()` when you are done.
 
 ## Lower-level API
 
