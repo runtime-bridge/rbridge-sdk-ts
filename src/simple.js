@@ -33,6 +33,8 @@ export class Response {
     this.runtime = raw.provider ?? "";
     this.sessionId = raw.session_id ?? "";
     this.stopReason = raw.stop_reason ?? "";
+    /** The model that ran, as the runtime reported it (what latest or auto became). */
+    this.model = raw.model ?? "";
     this.usage = { inputTokens: u.input_tokens ?? 0, outputTokens: u.output_tokens ?? 0, costUsd: u.cost_usd ?? 0 };
     let data = raw.structured ?? null;
     if (typeof data === "string") {
@@ -150,7 +152,9 @@ function approver(approve) {
  * One place to run prompts on the agent runtimes installed here. Every option
  * is a default for the calls that follow, and each call can override it:
  * runtime (an id from rb.runtimes(), such as "claude-code"; unset lets
- * rbridge choose), model, workspace (default: the current folder), skills
+ * rbridge choose), model ("latest" for the runtime's newest flagship, "auto"
+ * for its own recommended choice, or a model name), workspace (default: the
+ * current folder), skills
  * (ids, or folders of skills your program ships), profile ("observe" for
  * read-only, "standard", "controlled"), approve (false to deny permission
  * requests, true to allow, "read" for reads only, or a function), sandbox
@@ -162,10 +166,12 @@ function approver(approve) {
  * makes every run continue one conversation; rb.reset() starts a new one.
  */
 export class Rbridge {
-  constructor({ maxConcurrency = 4, maxCostUsd, stream = false, chat = false, app = "default", env, client, ...defaults } = {}) {
+  constructor({ maxConcurrency = 4, maxCostUsd, queueTimeout, stream = false, chat = false, app = "default", env, client, ...defaults } = {}) {
     this.#check(defaults);
     this.defaults = { skills: [], approve: false, ...defaults };
     this.maxConcurrency = maxConcurrency;
+    /** Seconds a run may wait for rbridge to have room; unset waits as long as it takes. */
+    this.queueTimeout = queueTimeout;
     this.maxCostUsd = maxCostUsd;
     /** Tokens and cost across every run made through this object. */
     this.usage = { inputTokens: 0, outputTokens: 0, costUsd: 0 };
@@ -238,6 +244,8 @@ export class Rbridge {
     if (o.sandbox) t.sandbox = o.sandbox;
     if (o.schema) t.output_schema = o.schema;
     if (o.timeout) t.timeout = Math.round(o.timeout * 1e9);
+    // Wait for a free session slot instead of failing when rbridge is busy.
+    t.slot_wait = this.queueTimeout == null ? -1 : Math.max(1, Math.round(this.queueTimeout * 1e9));
     return t;
   }
 
@@ -249,8 +257,21 @@ export class Rbridge {
     return r;
   }
 
+  // Opens a session, retrying while rbridge says the request may succeed later
+  // (rate limits, a daemon restarting). Nothing has run yet, so a retry
+  // repeats no work; a prompt is never retried.
   async #open(t, o, onEvent) {
-    return (await this.client()).open(t, { onEvent, approver: approver(o.approve), model: o.model });
+    const giveUp = this.queueTimeout == null ? null : Date.now() + this.queueTimeout * 1000;
+    let delay = 200;
+    for (;;) {
+      try {
+        return await (await this.client()).open(t, { onEvent, approver: approver(o.approve), model: o.model });
+      } catch (e) {
+        if (!e.retryable || (giveUp != null && Date.now() + delay > giveUp)) throw e;
+      }
+      await new Promise((r) => setTimeout(r, delay + Math.random() * delay / 2));
+      delay = Math.min(delay * 2, 5000);
+    }
   }
 
   #stream(prompt, o, onEvent) {
@@ -358,7 +379,13 @@ export class Rbridge {
   /** The runtimes rbridge knows, with whether each is installed. */
   async runtimes() {
     const list = await (await this.client()).providers();
-    return list.map((p) => ({ id: p.id, name: p.display_name ?? p.id, available: p.runtime?.health === "available", version: p.runtime?.version }));
+    return list.map((p) => ({
+      id: p.id,
+      name: p.display_name ?? p.id,
+      available: p.runtime?.health === "available",
+      version: p.runtime?.version,
+      models: p.model_names ?? {},
+    }));
   }
 
   /** Adds every skill in a folder (or several) and resolves to their ids; trusted as reviewed by default. */

@@ -16,10 +16,12 @@ export const PROTOCOL_VERSION = 1;
 
 /** Error carrying one of rbridge's stable error codes. */
 export class RbridgeError extends Error {
-  constructor(code, message, details) {
+  constructor(code, message, details, retryable = false) {
     super(message);
     this.name = "RbridgeError";
     this.code = code;
+    /** True when the same request may succeed later (every slot busy, rate limited). */
+    this.retryable = retryable;
     this.details = details ?? {};
   }
 }
@@ -165,7 +167,7 @@ class IPCTransport {
     this.pending.delete(m.id);
     if (m.error) {
       const d = m.error.data ?? {};
-      p.reject(new RbridgeError(d.code ?? "internal_error", d.message ?? m.error.message, d.details));
+      p.reject(new RbridgeError(d.code ?? "internal_error", d.message ?? m.error.message, d.details, Boolean(d.retryable)));
     } else {
       p.resolve(m.result);
     }
@@ -210,7 +212,7 @@ class HTTPTransport {
     const data = await res.json();
     if (!res.ok) {
       const e = data.error ?? {};
-      throw new RbridgeError(e.code ?? "internal_error", e.message ?? res.statusText, e.details);
+      throw new RbridgeError(e.code ?? "internal_error", e.message ?? res.statusText, e.details, Boolean(e.retryable) || res.status === 429);
     }
     return data;
   }
