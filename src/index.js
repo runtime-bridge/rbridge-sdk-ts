@@ -36,7 +36,12 @@ export function text(s) {
 // absolute (the daemon runs elsewhere and needs a full path).
 function toTask(task) {
   const t = typeof task === "string" ? { prompt: task } : { ...task };
-  t.workspace = path.resolve(t.workspace || process.cwd());
+  if (t.files?.length && !t.workspace) {
+    delete t.workspace; // rbridge makes a working folder holding only the files
+  } else {
+    t.workspace = path.resolve(t.workspace || process.cwd());
+  }
+  if (t.files?.length) t.files = t.files.map((f) => path.resolve(f));
   return t;
 }
 

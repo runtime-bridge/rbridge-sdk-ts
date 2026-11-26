@@ -228,8 +228,10 @@ export interface RunOptions {
   runtime?: string;
   /** "latest" (the runtime's newest flagship), "auto" (its own recommended choice), or a model name. */
   model?: "latest" | "auto" | (string & {});
-  /** Defaults to the current folder. */
+  /** Defaults to the current folder, or with files to a folder rbridge makes for them. */
   workspace?: string;
+  /** Files for the task: paths, { name, data } objects, or File and Blob objects from a form. */
+  files?: Array<string | { name: string; data: Uint8Array | string } | Blob>;
   /** Skill ids, or folders of skills your program ships (added and trusted as reviewed). */
   skills?: string[];
   /** "observe" (read-only), "standard", "controlled" or "custom". */
@@ -268,6 +270,8 @@ export declare class Response {
   usage: { inputTokens: number; outputTokens: number; costUsd: number };
   /** The answer parsed as JSON when a schema was given, else null. */
   data: any;
+  /** With a schema that can parse (such as Zod), the answer it parsed. */
+  parsed?: any;
   raw: Result;
 }
 
@@ -303,6 +307,8 @@ export declare class Rbridge {
   reset(): Promise<void>;
   runMany(prompts: Array<Prompt | ({ prompt: Prompt } & RunOptions)>, options?: RunOptions & { returnExceptions?: boolean; maxConcurrency?: number; schema?: object }): Promise<Array<Response | Error>>;
   chat(options?: RunOptions): Chat;
+  /** The skills in rbridge's library, to show or choose from. */
+  skills(): Promise<Array<{ id: string; description: string; trust: string; version: string | null; scripts: boolean }>>;
   runtimes(): Promise<Array<{ id: string; name: string; available: boolean; version?: string; models: Record<string, string> }>>;
   addSkills(source: string | string[], options?: { trust?: string; only?: string[]; exclude?: string[] }): Promise<string[]>;
   close(): Promise<void>;

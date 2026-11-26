@@ -19,11 +19,12 @@
 // does not cover.
 
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 
 import { connect, RbridgeError } from "./index.js";
 
-const OPTIONS = ["runtime", "model", "workspace", "skills", "profile", "approve", "sandbox", "timeout"];
+const OPTIONS = ["runtime", "model", "workspace", "skills", "profile", "approve", "sandbox", "timeout", "files"];
 
 /** What a runtime answered. */
 export class Response {
@@ -46,6 +47,8 @@ export class Response {
     }
     /** The answer parsed as JSON when a schema was given, else null. */
     this.data = data;
+    /** With a schema that can parse (such as Zod), the answer it parsed. */
+    this.parsed = undefined;
     /** The full result as the daemon sent it. */
     this.raw = raw;
   }
@@ -138,6 +141,41 @@ async function deliver(stream, to) {
   return stream.response;
 }
 
+const isDir = (p) => {
+  try {
+    return fs.statSync(p).isDirectory();
+  } catch {
+    return false;
+  }
+};
+
+// With a schema that can parse (such as Zod), the answer it parsed.
+function parsed(r, schema) {
+  if (r && r.data != null && schema && typeof schema.parse === "function") r.parsed = schema.parse(r.data);
+  return r;
+}
+
+// Paths for the files a run brings. Paths are used as they are; uploads
+// ({ name, data }, or a File or Blob from a form) are written to a temporary
+// folder, removed once rbridge has copied them.
+async function stage(files) {
+  const paths = [];
+  let tmp = null;
+  const spill = (name, bytes) => {
+    tmp ??= fs.mkdtempSync(path.join(os.tmpdir(), "rbridge-upload-"));
+    const dest = path.join(tmp, path.basename(name || "upload"));
+    fs.writeFileSync(dest, bytes);
+    return dest;
+  };
+  for (const f of files ?? []) {
+    if (typeof f === "string") paths.push(path.resolve(f));
+    else if (f && typeof f.arrayBuffer === "function") paths.push(spill(f.name, Buffer.from(await f.arrayBuffer())));
+    else if (f && f.name && f.data != null) paths.push(spill(f.name, typeof f.data === "string" ? Buffer.from(f.data) : f.data));
+    else throw new TypeError("files takes paths, { name, data } objects, or File and Blob objects");
+  }
+  return { paths, cleanup: () => tmp && fs.rmSync(tmp, { recursive: true, force: true }) };
+}
+
 const isMessages = (p) => Array.isArray(p) && p.length > 0 && p.every((x) => typeof x === "string");
 
 function approver(approve) {
@@ -178,7 +216,6 @@ export class Rbridge {
     this.app = app;
     this.env = env;
     this.connection = client ? Promise.resolve(client) : null;
-    this.skillDirs = new Map();
     this.streamTo = stream;
     this.chatting = chat;
     this.conversation = null;
@@ -205,44 +242,15 @@ export class Rbridge {
     return o;
   }
 
-  async #skillIds(skills) {
-    const ids = [];
-    for (const s of skills ?? []) {
-      let isDir = false;
-      try {
-        isDir = fs.statSync(s).isDirectory();
-      } catch {
-        // an id, not a folder
-      }
-      if (!isDir) {
-        ids.push(s);
-        continue;
-      }
-      const abs = path.resolve(s);
-      // Parallel runs share one add of the same folder.
-      if (!this.skillDirs.has(abs)) {
-        const adding = (async () => {
-          const { items } = await (await this.client()).addSkills(abs, { trust: "reviewed" });
-          const failed = items.find((i) => i.status === "failed");
-          if (failed) throw new RbridgeError("skill_invalid", `${failed.id}: ${failed.reason}`);
-          if (items.length !== 1) throw new RbridgeError("invalid_input", `${s} holds ${items.length} skills; name one, or add them with addSkills`);
-          return items[0].id;
-        })();
-        this.skillDirs.set(abs, adding);
-        adding.catch(() => this.skillDirs.delete(abs));
-      }
-      ids.push(await this.skillDirs.get(abs));
-    }
-    return ids;
-  }
-
   async #task(prompt, o) {
-    const t = { prompt, workspace: o.workspace };
+    const t = { prompt };
+    if (o.workspace || !o.files?.length) t.workspace = path.resolve(o.workspace || process.cwd());
     if (o.runtime) t.provider = o.runtime;
-    if (o.skills?.length) t.skills = await this.#skillIds(o.skills);
+    // A folder (of one skill or several) is added and trusted by rbridge.
+    if (o.skills?.length) t.skills = o.skills.map((s) => (isDir(s) ? path.resolve(s) : s));
     if (o.profile) t.profile = o.profile;
     if (o.sandbox) t.sandbox = o.sandbox;
-    if (o.schema) t.output_schema = o.schema;
+    if (o.schema) t.output_schema = typeof o.schema.toJSONSchema === "function" ? o.schema.toJSONSchema() : o.schema;
     if (o.timeout) t.timeout = Math.round(o.timeout * 1e9);
     // Wait for a free session slot instead of failing when rbridge is busy.
     t.slot_wait = this.queueTimeout == null ? -1 : Math.max(1, Math.round(this.queueTimeout * 1e9));
@@ -263,14 +271,21 @@ export class Rbridge {
   async #open(t, o, onEvent) {
     const giveUp = this.queueTimeout == null ? null : Date.now() + this.queueTimeout * 1000;
     let delay = 200;
-    for (;;) {
-      try {
-        return await (await this.client()).open(t, { onEvent, approver: approver(o.approve), model: o.model });
-      } catch (e) {
-        if (!e.retryable || (giveUp != null && Date.now() + delay > giveUp)) throw e;
+    const staged = await stage(o.files);
+    if (staged.paths.length) t = { ...t, files: staged.paths };
+    try {
+      for (;;) {
+        try {
+          // rbridge copies the files when the session opens.
+          return await (await this.client()).open(t, { onEvent, approver: approver(o.approve), model: o.model });
+        } catch (e) {
+          if (!e.retryable || (giveUp != null && Date.now() + delay > giveUp)) throw e;
+        }
+        await new Promise((r) => setTimeout(r, delay + Math.random() * delay / 2));
+        delay = Math.min(delay * 2, 5000);
       }
-      await new Promise((r) => setTimeout(r, delay + Math.random() * delay / 2));
-      delay = Math.min(delay * 2, 5000);
+    } finally {
+      staged.cleanup();
     }
   }
 
@@ -315,11 +330,11 @@ export class Rbridge {
     }
     if (chat) return this.#defaultChat(options).send(prompt, { stream });
     const o = this.#options(options);
-    if (stream) return deliver(this.#stream(prompt, o, onEvent), stream);
+    if (stream) return parsed(await deliver(this.#stream(prompt, o, onEvent), stream), o.schema);
     const t = await this.#task(prompt, o);
     const s = await this.#open(t, o, onEvent);
     try {
-      return this.#count(await s.prompt(prompt));
+      return parsed(this.#count(await s.prompt(prompt)), o.schema);
     } finally {
       await s.close();
     }
@@ -386,6 +401,12 @@ export class Rbridge {
       version: p.runtime?.version,
       models: p.model_names ?? {},
     }));
+  }
+
+  /** The skills in rbridge's library, for a program to show or choose from. */
+  async skills() {
+    const list = await (await this.client()).skills();
+    return list.map((s) => ({ id: s.id, description: s.description ?? "", trust: s.trust, version: s.version || null, scripts: Boolean(s.has_scripts) }));
   }
 
   /** Adds every skill in a folder (or several) and resolves to their ids; trusted as reviewed by default. */
@@ -471,8 +492,8 @@ export class Chat {
       for (const p of prompt) out.push(await this.send(p, { stream }));
       return out;
     }
-    if (stream) return deliver(this.stream(prompt), stream);
-    return new Response(await this.#start(prompt)(null));
+    if (stream) return parsed(await deliver(this.stream(prompt), stream), this.options.schema);
+    return parsed(new Response(await this.#start(prompt)(null)), this.options.schema);
   }
 
   /** The answer as an async iterable of text chunks. */

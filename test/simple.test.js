@@ -130,6 +130,23 @@ test("models: a name, auto, and a typo", async () => {
   await rb.close();
 });
 
+test("files go to the runtime, and skills can be listed", async () => {
+  const src = path.join(d.home, "in");
+  fs.mkdirSync(src, { recursive: true });
+  fs.writeFileSync(path.join(src, "notes.md"), "# Notes\n");
+  const rb = new Rbridge({ env: d.env });
+  const r = await rb.run("read them", {
+    files: [path.join(src, "notes.md"), { name: "data.csv", data: "a,b\n1,2\n" }, new File(["uploaded"], "report.txt")],
+  });
+  assert.match(r.text, /Files for this task, in your working folder: notes\.md; data\.csv; report\.txt\./);
+  const dir = path.join(d.home, "src-tidy", "tidy");
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, "SKILL.md"), "---\nname: tidy\ndescription: Keep things tidy.\n---\nTidy.\n");
+  await rb.addSkills(dir);
+  assert.ok((await rb.skills()).some((s) => s.id === "tidy" && s.description === "Keep things tidy." && s.trust === "reviewed"));
+  await rb.close();
+});
+
 test("a skill folder is added and used, and the budget stops new runs", async () => {
   const dir = path.join(d.home, "src", "calm");
   fs.mkdirSync(dir, { recursive: true });
