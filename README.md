@@ -68,11 +68,29 @@ const answers = await rb.runMany(["Review a.js", "Review b.js", "Review c.js"]);
 // or with your own control: await Promise.all([rb.run("Review a.js"), rb.run("Review b.js")])
 ```
 
-**Structured output**, parsed for you:
+**Structured output**, parsed for you. A JSON schema works, and so does a schema object with `toJSONSchema()` and `parse()` (Zod's shape), which sets `parsed`:
 
 ```js
 const r = await rb.run("List the TODOs in this project", { schema: { type: "object", properties: { todos: { type: "array", items: { type: "string" } } } } });
 console.log(r.data.todos);
+```
+
+**Documents**, as paths or uploads. rbridge puts them in a working folder of their own for the run, gives Word files a text copy, and tells the runtime about them:
+
+```js
+await rb.run("Summarise these", { files: ["report.pdf", "bill.docx"] });
+
+app.post("/summarise", async (req, res) => {                 // with a form upload
+  const file = (await req.formData()).get("file");           // a File
+  res.json({ text: (await rb.run("Summarise this", { files: [file] })).text });
+});
+```
+
+**Skills** your program ships are named by folder (added and trusted on first use), and `rb.skills()` lists the library, for a page that lets people choose:
+
+```js
+await rb.run("Review this", { skills: ["./skills/security-review"] });
+for (const s of await rb.skills()) console.log(s.id, s.description);
 ```
 
 ### Options
@@ -83,8 +101,10 @@ Every option can be set on `new Rbridge({...})` as a default and overridden on a
 |---|---|
 | `runtime` | Which runtime: an id from `runtimes()`; unset lets rbridge pick |
 | `model` | `"latest"` (the runtime's newest flagship), `"auto"` (its own recommended choice), or a model name the runtime accepts; unset uses its configured default. `runtimes()` lists each runtime's names, and `response.model` says which model ran |
-| `workspace` | The folder the runtime works in; default the current folder |
-| `skills` | Skill ids, or folders of skills your program ships (added and trusted on first use) |
+| `files` | Paths, `{ name, data }` objects, or `File` and `Blob` objects from a form |
+| `workspace` | The folder the runtime works in; default the current folder, or with files a folder rbridge makes for them |
+| `skills` | Skill ids, or folders of skills your program ships (rbridge adds and trusts them on first use) |
+| `schema` | A JSON schema, or a schema with `toJSONSchema()` and `parse()`; the answer is in `data`, and parsed in `parsed` |
 | `profile` | `observe` (read-only), `standard` or `controlled` |
 | `approve` | When the runtime asks permission: `false` deny (default), `true` allow, `"read"` reads only, or a function given the request |
 | `sandbox` | `files` or `full`, on Linux |
