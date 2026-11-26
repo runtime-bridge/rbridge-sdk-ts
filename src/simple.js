@@ -213,14 +213,19 @@ export class Rbridge {
         continue;
       }
       const abs = path.resolve(s);
+      // Parallel runs share one add of the same folder.
       if (!this.skillDirs.has(abs)) {
-        const { items } = await (await this.client()).addSkills(abs, { trust: "reviewed" });
-        const failed = items.find((i) => i.status === "failed");
-        if (failed) throw new RbridgeError("skill_invalid", `${failed.id}: ${failed.reason}`);
-        if (items.length !== 1) throw new RbridgeError("invalid_input", `${s} holds ${items.length} skills; name one, or add them with addSkills`);
-        this.skillDirs.set(abs, items[0].id);
+        const adding = (async () => {
+          const { items } = await (await this.client()).addSkills(abs, { trust: "reviewed" });
+          const failed = items.find((i) => i.status === "failed");
+          if (failed) throw new RbridgeError("skill_invalid", `${failed.id}: ${failed.reason}`);
+          if (items.length !== 1) throw new RbridgeError("invalid_input", `${s} holds ${items.length} skills; name one, or add them with addSkills`);
+          return items[0].id;
+        })();
+        this.skillDirs.set(abs, adding);
+        adding.catch(() => this.skillDirs.delete(abs));
       }
-      ids.push(this.skillDirs.get(abs));
+      ids.push(await this.skillDirs.get(abs));
     }
     return ids;
   }
