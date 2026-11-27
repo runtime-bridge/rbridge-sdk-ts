@@ -136,6 +136,10 @@ class IPCTransport {
 
   constructor(conn) {
     this.conn = conn;
+    // The connection keeps the process alive only while a call is waiting for
+    // its answer (a turn in progress, an approval), so a program that is done
+    // can exit without closing its client.
+    conn.unref();
     this.nextId = 0;
     this.pending = new Map();
     this.listeners = new Map();
@@ -170,6 +174,7 @@ class IPCTransport {
     const p = this.pending.get(m.id);
     if (!p) return;
     this.pending.delete(m.id);
+    if (this.pending.size === 0) this.conn.unref();
     if (m.error) {
       const d = m.error.data ?? {};
       p.reject(new RbridgeError(d.code ?? "internal_error", d.message ?? m.error.message, d.details, Boolean(d.retryable)));
@@ -182,6 +187,7 @@ class IPCTransport {
     if (this.closed) return Promise.reject(new RbridgeError("provider_unavailable", "connection to the daemon closed"));
     const id = ++this.nextId;
     return new Promise((resolve, reject) => {
+      if (this.pending.size === 0) this.conn.ref();
       this.pending.set(id, { resolve, reject });
       this.conn.write(JSON.stringify({ jsonrpc: "2.0", id, method, params: params ?? {} }) + "\n");
     });

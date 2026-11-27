@@ -219,6 +219,9 @@ export class Rbridge {
     this.streamTo = stream;
     this.chatting = chat;
     this.conversation = null;
+    /** Conversations still open; closed when the program is about to exit. */
+    this.chats = new Set();
+    open.add(new WeakRef(this));
   }
 
   #check(opts) {
@@ -429,15 +432,30 @@ export class Rbridge {
 
   async close() {
     await this.reset();
+    for (const chat of [...this.chats]) await chat.close();
     if (this.connection) (await this.connection).close();
     this.connection = null;
   }
 }
 
+// A program that ends without close() must not leave conversations in the
+// daemon, holding its slots until they time out: close them on the way out.
+const open = new Set();
+let closing = false;
+process.on("beforeExit", async () => {
+  if (closing) return;
+  closing = true;
+  for (const ref of open) {
+    const rb = ref.deref();
+    if (rb && (rb.conversation || rb.chats.size)) await rb.close().catch(() => {});
+  }
+});
+
 /** A conversation: each send() continues the same session. */
 export class Chat {
   constructor(rb, options) {
     this.rb = rb;
+    rb.chats.add(this);
     this.options = options;
     this.session = null;
     this.sink = null;
@@ -502,6 +520,7 @@ export class Chat {
   }
 
   async close() {
+    this.rb.chats.delete(this);
     await this.turn;
     if (this.session) await this.session.close();
     this.session = null;

@@ -57,7 +57,7 @@ await rb.run(["Summarise the tests", "Shorter"]);
 await rb.reset();                              // start a new conversation
 ```
 
-Any call can still override a default (`rb.run("...", { stream: false })`), and `rb.chat()` gives a separate conversation object when you want several at once (`chat.send(...)`).
+Any call can still override a default (`rb.run("...", { stream: false })`), and `rb.chat()` gives a separate conversation object when you want several at once (`chat.send(...)`). A program exits by itself when its work is done, and conversations still open are closed on the way out, so they never hold rbridge's slots afterwards; `rb.reset()` or `rb.close()` ends them sooner.
 
 To handle the chunks yourself, pass a function, `{ stream: (chunk) => ... }`, or take the iterator, `for await (const chunk of rb.stream("..."))`.
 
