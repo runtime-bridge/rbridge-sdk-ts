@@ -160,3 +160,25 @@ test("a skill folder is added and used, and the budget stops new runs", async ()
   const broke = make({ maxCostUsd: 0 });
   await assert.rejects(broke.run("x"), (e) => e.code === "budget_exceeded");
 });
+
+test("a program that ends without close exits, and leaves no session open", async () => {
+  const { execFile } = await import("node:child_process");
+  const entry = new URL("../src/index.js", import.meta.url).href;
+  const child = [
+    `import { Rbridge } from ${JSON.stringify(entry)};`,
+    `const rb = new Rbridge({ workspace: ${JSON.stringify(d.workspace)}, env: ${JSON.stringify(d.env)}, chat: true });`,
+    `await rb.run("one");`,
+    `await rb.chat().send("two");`,
+  ].join("\n");
+  const started = Date.now();
+  await new Promise((resolve, reject) => {
+    execFile(process.execPath, ["--input-type=module", "-e", child], { env: { ...process.env, ...d.env }, timeout: 20000 },
+      (err) => (err ? reject(err) : resolve()));
+  });
+  assert.ok(Date.now() - started < 20000, "the program did not exit by itself");
+  const rb = make();
+  const client = await rb.client();
+  const open = (await client.sessions()).filter((s) => ["ready", "running"].includes(s.state));
+  assert.deepEqual(open, []);
+  await rb.close();
+});
